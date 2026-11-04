@@ -1,10 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// Explicit local TLS/proxy mode. Production uses its own TLS ingress and configuration.
+const tls = process.env.ORANGE_ADMIN_TLS_DIR;
 
 export default defineConfig({
   plugins: [react()],
-  server: { host: '127.0.0.1', port: 43110, strictPort: true,
+  server: { host: '127.0.0.1', port: tls ? 43112 : 43110, strictPort: true,
+    ...(tls ? { https: { key: readFileSync(resolve(tls, 'key.pem')), cert: readFileSync(resolve(tls, 'cert.pem')) },
+      proxy: { '/admin/v1': { target: 'http://127.0.0.1:43102', changeOrigin: false } } } : {}),
     fs: { allow: [fileURLToPath(new URL('../../', import.meta.url))] } },
   preview: { host: '127.0.0.1', port: 43111, strictPort: true },
   build: { sourcemap: false },

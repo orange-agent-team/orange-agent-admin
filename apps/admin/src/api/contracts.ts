@@ -1,5 +1,5 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import schema from '../../../../docs/contracts/admin.schema.json';
+import schema from '../../../../docs/contracts/admin.schema.json' with { type: 'json' };
 
 export interface Scope { environment: 'dev' | 'staging' | 'production'; kind: 'platform' | 'region' | 'tenant' | 'resource'; scope_id: string }
 export interface AdminSession {

@@ -1,19 +1,19 @@
 # 管理端契约消费说明
 
-快照日期：2026-11-04；版本0.1.0；SHA-256以实际源文件字节计算，当前无Git提交号，不伪造commit。
+快照日期：2026-11-04；OpenAPI 0.1.1。权威源由服务端 E02 维护；Admin 消费提交在自己仓库中的固定字节，不在构建时读取相邻仓库。
 
 | 产物 | 源路径 | SHA-256 |
 |---|---|---|
-| admin.openapi.json | orange-agent-server/contracts/openapi/admin.v1.json | 593c7bd6504e5d07c681c893b3cf88f6caf2cf275ad5b798303d4561ffae2cc3 |
-| admin.schema.json | orange-agent-server/contracts/json-schema/admin.schema.json | 1a8ab26a2d795e90a1dbee1e8065a0546a9329f702dc4498972f7245761c0503 |
+| admin.openapi.json | orange-agent-server/contracts/openapi/admin.v1.json | 70bec0d1b120a9ff977f2fc92cc193c606274027724b3d34c55bb4a3d28b514d |
+| admin.schema.json | orange-agent-server/contracts/json-schema/admin.schema.json | f442f88527d512b3bbae346515fb280f3789f5a98c3059f7ff5e2ec9ca9c1873 |
 
-本目录的admin.openapi.json和admin.schema.json已从用户Web文档目录迁入独立Admin仓库，是服务端contracts中0.1.0草案的只读快照；权威源由E02维护。E11只能消费和提出变更，不独立修改副本的金额、权限或动作状态。
+本目录的 OpenAPI 和 JSON Schema 是服务端只读快照。E11只能消费和提出变更，不独立修改副本的金额、权限或动作状态。[机器摘要清单](snapshot.json)由独立构建检查校验。
 
 - [OpenAPI](admin.openapi.json)：路径、operationId、参数、响应和动作权限政策。
-- [可读操作索引](api-index.md)：39个操作及17种动作权限，便于按页面定位。
+- [可读操作索引](api-index.md)：42个操作及17种动作权限，便于按页面定位。
 - [JSON Schema](admin.schema.json)：17种类型化动作及相关请求/响应定义。
 - [示例请求](admin-action-create.json)：staging节点排空示例，仅为数据，不执行操作。
 
-更新顺序为服务端修改/审阅→解析与示例校验→复制相同字节并记录摘要→Admin客户端适配→跨端契约测试。当前只验证协议文档结构，尚无SDK、服务、浏览器或身份集成结果。快照随独立Admin版本发布，不要求用户Web一同发版。
+更新顺序为服务端修改/审阅→解析与示例校验→执行 `scripts/export-admin-contracts.py --admin-repo <Admin仓库>` 导出相同字节并记录摘要→Admin客户端适配→跨端契约测试→分别提交。快照随独立Admin版本发布，不要求用户Web一同发版。
 
-Admin登录重定向/OIDC发现/回调属于身份提供方和E07会话实现的专项契约，本草案仅定义已建立管理会话的查询/撤销及业务API；不可把不存在的登录实现视作已通过。
+0.1.1 增加 `/auth/start`、`/auth/callback` 和 `/auth/step-up`，合计40个路径。七个开发候选操作为三个认证入口、会话查询/撤销、总览、操作列表；其余业务读写仍待实现。每个操作标注 `x-implementation-status`，不把草案声明等同于实现。真实本机 Keycloak/HTTPS/Chrome 测试已独立通过；生产身份提供方认证、管理写操作和双人批准尚未完成。
