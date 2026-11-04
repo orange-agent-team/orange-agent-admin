@@ -14,5 +14,8 @@ export default defineConfig({
       proxy: { '/admin/v1': { target: 'http://127.0.0.1:43102', changeOrigin: false } } } : {}),
     fs: { allow: [fileURLToPath(new URL('../../', import.meta.url))] } },
   preview: { host: '127.0.0.1', port: 43111, strictPort: true },
-  build: { sourcemap: false },
+  build: { sourcemap: false, manifest: true, rolldownOptions: { output: { codeSplitting: { groups: [
+    { name: 'react-core', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, includeDependenciesRecursively: false },
+    { name: 'schema-engine', test: /node_modules[\\/]ajv[\\/]/, includeDependenciesRecursively: false },
+  ] } } } },
 });

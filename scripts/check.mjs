@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 if (!process.version.startsWith('v22.23.2')) throw new Error('Use the pinned Node 22.23.2 toolchain');
@@ -19,7 +19,23 @@ for (const command of ['test', 'build']) {
   const result = spawnSync(process.execPath, [npm, 'run', command], { cwd, env, stdio: 'inherit' });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
+const dist = path.join(cwd, 'dist');
+const manifest = JSON.parse(readFileSync(path.join(dist, '.vite/manifest.json'), 'utf8'));
+const initial = new Set();
+function visit(key) {
+  if (initial.has(key)) return;
+  initial.add(key);
+  for (const dependency of manifest[key].imports ?? []) visit(dependency);
+}
+for (const [key, chunk] of Object.entries(manifest)) if (chunk.isEntry) visit(key);
+const chunks = Object.entries(manifest).filter(([, chunk]) => chunk.file.endsWith('.js'))
+  .map(([key, chunk]) => ({ file: chunk.file, bytes: statSync(path.join(dist, chunk.file)).size, initial: initial.has(key) }));
+const report = { initial_js_bytes: chunks.filter(c => c.initial).reduce((sum, c) => sum + c.bytes, 0),
+  largest_chunk_bytes: Math.max(...chunks.map(c => c.bytes)), chunks };
+writeFileSync(path.join(dist, 'bundle-report.json'), JSON.stringify(report, null, 2) + '\n');
+console.log(`Bundle: initial JS ${report.initial_js_bytes} bytes; largest chunk ${report.largest_chunk_bytes} bytes`);
+if (report.largest_chunk_bytes > 500000) throw new Error('JavaScript chunk exceeds the unchanged 500 kB budget');
 if (process.argv.includes('--browser')) {
-  const result = spawnSync(process.execPath, [npm, 'run', 'test:e2e'], { cwd, env, stdio: 'inherit' });
+  const result = spawnSync(process.execPath, [npm, 'run', 'test:e2e'], { cwd, env: { ...env, ORANGE_ADMIN_TEST_BUILD: '1' }, stdio: 'inherit' });
   process.exit(result.status ?? 1);
 }
