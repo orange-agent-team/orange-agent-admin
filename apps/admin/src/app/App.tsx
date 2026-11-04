@@ -37,10 +37,9 @@ export function App() {
     return () => clearTimeout(timer);
   }, [session, refresh]);
   const logout = async () => {
-    if (!session) return;
     const old = session; signedOut.current = true; generation.current++; request.current?.abort();
     setSession(null); setChecking(true);
-    try { await api.logout(old); setError(new ApiFailure(401, 'SIGNED_OUT')); }
+    try { if (old) await api.logout(old); else await api.logoutCurrent(); setError(new ApiFailure(401, 'SIGNED_OUT')); }
     catch (failure) { setError(failure); }
     finally { setChecking(false); }
   };
@@ -51,6 +50,7 @@ export function App() {
           : <><Tag color="orange">平台管理入口</Tag><h1>{error instanceof ApiFailure && error.status === 401 ? '需要管理员身份' : '暂时无法进入管理控制台'}</h1>
             <p>请通过平台配置的管理登录入口建立会话。普通用户或组织管理员身份不能访问此入口。</p>
             <Failure error={error} /><Button type="primary" href="/admin/v1/auth/start">管理员登录</Button> <Button onClick={() => { void refresh(true); }}>重新检查会话</Button>
+            <Button onClick={() => { void logout(); }}>退出当前会话</Button>
             <p className="muted small">登录需要平台授权和多因素验证。权限由服务端逐次核验。</p></>}
         </Card></main>}
     </Suspense>

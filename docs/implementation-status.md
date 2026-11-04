@@ -1,5 +1,7 @@
 # Admin首个代码切片
 
+本轮补充：OIDC协议验证原语与普通用户服务复用，管理client/cookie/会话/角色仍独立。新增自身退出上下文；权限已撤销时仍能通过Origin/CSRF保护结束自身会话，不恢复任何资源权限。前端登录门禁也提供“退出当前会话”，退出只接受明确204或已无会话401，不把202当作完成。
+
 日期：2026-11-04。已开始ADMIN-W01/W02的部分实现，原工作包未整体完成。
 
 已落地apps/admin：React/TypeScript/Vite、Router、TanStack Query、Ant Design与精确依赖锁；管理会话bootstrap/MFA/到期拒绝、scope绑定缓存、错误与取消传播、no-store请求、只读总览和管理动作列表/详情。unknown明确要求核对，不提供“重试执行”或假成功。

@@ -48,8 +48,15 @@ export class AdminClient {
     return result;
   }
   async logout(session: AdminSession): Promise<void> {
+    return this.revoke(session.csrf_token);
+  }
+  private async revoke(csrf: string): Promise<void> {
     const response = await this.fetcher('/admin/v1/session', { method: 'DELETE', credentials: 'same-origin',
-      cache: 'no-store', redirect: 'error', headers: { 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': crypto.randomUUID() } });
-    if (!response.ok && response.status !== 401) throw new ApiFailure(response.status, 'LOGOUT_UNCONFIRMED');
+      cache: 'no-store', redirect: 'error', headers: { 'X-CSRF-Token': csrf, 'Idempotency-Key': crypto.randomUUID() } });
+    if (response.status !== 204 && response.status !== 401) throw new ApiFailure(response.status, 'LOGOUT_UNCONFIRMED');
+  }
+  async logoutCurrent(): Promise<void> {
+    try { const context = decode('SessionRevocationContext', await this.read('/admin/v1/session/revocation')); await this.revoke(context.csrf_token); }
+    catch (error) { if (!(error instanceof ApiFailure && error.status === 401)) throw error; }
   }
 }

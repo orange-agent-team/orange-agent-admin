@@ -1,5 +1,7 @@
 # Admin契约操作索引
 
+0.1.2 增量：`GET /admin/v1/session/revocation`提供当前cookie的自身退出上下文；共43个操作。该接口不授予资源权限，角色被撤销后仍可通过Origin/CSRF保护注销自身会话。
+
 0.1.1 增量：新增 `GET /admin/v1/auth/start`（浏览器绑定登录）、`GET /admin/v1/auth/callback`（一次性交换/真实 MFA 校验）、`POST /admin/v1/auth/step-up`（当前主体重新验证）。合计 42 个操作。下面保留 0.1.0 业务索引；是否已实现以 OpenAPI 的 `x-implementation-status` 和执行证据为准。
 
 版本0.1.0只读消费索引，由本目录OpenAPI快照整理；未执行任何接口。字段/required/enum/错误及权限政策以[OpenAPI](admin.openapi.json)和[JSON Schema](admin.schema.json)为准。

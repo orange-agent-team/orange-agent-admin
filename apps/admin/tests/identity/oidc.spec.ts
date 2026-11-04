@@ -57,7 +57,7 @@ async function login(page: Page, negativeOtp = false) {
 test('real password + TOTP, scoped reads, CSRF rejection, immediate role revocation and logout', async ({ page }) => {
   grants(false);
   try {
-    const session = await login(page, true);
+    await login(page, true);
     const cookie = (await page.context().cookies()).find(c => c.name === '__Host-orange-admin');
     expect(cookie?.secure).toBe(true); expect(cookie?.httpOnly).toBe(true); expect(cookie?.sameSite).toBe('Lax');
     const overview = await page.request.get('/admin/v1/overview'+scope);
@@ -72,9 +72,11 @@ test('real password + TOTP, scoped reads, CSRF rejection, immediate role revocat
     expect((await page.request.get('/admin/v1/overview'+scope)).status()).toBe(403);
     expect((await page.request.get('/admin/v1/actions'+scope)).status()).toBe(403);
     expect((await page.request.get('/admin/v1/session')).status()).toBe(403);
-    grants(false);
+    const contextResponse = await page.request.get('/admin/v1/session/revocation');
+    expect(contextResponse.status()).toBe(200);
+    const context = decode('SessionRevocationContext', await contextResponse.json());
     const logout = await page.request.delete('/admin/v1/session', { headers: { Origin: 'https://127.0.0.1:43112',
-      'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': crypto.randomUUID() } });
+      'X-CSRF-Token': context.csrf_token, 'Idempotency-Key': crypto.randomUUID() } });
     expect(logout.status()).toBe(204);
     expect((await page.request.get('/admin/v1/session')).status()).toBe(401);
   } finally { grants(false); }

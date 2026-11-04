@@ -1,13 +1,13 @@
 {
-  "openapi_version": "0.1.1",
+  "openapi_version": "0.1.2",
   "files": {
     "admin.openapi.json": {
       "source": "contracts/openapi/admin.v1.json",
-      "sha256": "70bec0d1b120a9ff977f2fc92cc193c606274027724b3d34c55bb4a3d28b514d"
+      "sha256": "91270c27fb1024c0bb1da57092139662e5269f0d3a4b49c879d02686febed49f"
     },
     "admin.schema.json": {
       "source": "contracts/json-schema/admin.schema.json",
-      "sha256": "f442f88527d512b3bbae346515fb280f3789f5a98c3059f7ff5e2ec9ca9c1873"
+      "sha256": "682b375067158d1071252a51c06e40a7ae39c28a0bc3efb794e781a583871714"
     }
   }
 }
