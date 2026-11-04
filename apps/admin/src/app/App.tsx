@@ -93,7 +93,7 @@ function AuthorizedApp({ session, invalidate, logout }: { session: AdminSession;
       <div className="workspace"><header className="topbar"><div><span className="muted">工作空间</span><span className="slash">/</span><strong>平台运营</strong></div>
         <div className="topbar-right"><Select aria-label="访问范围" value={selected} onChange={setSelected} className="scope-select" options={session.scopes.map((s, index) => ({ value: index, label: `${envNames[s.environment]} · ${s.scope_id}` }))} />
           <Tag color={scope.environment === 'production' ? 'red' : 'default'}>{envNames[scope.environment]}</Tag><Button onClick={logout}>退出</Button></div></header>
-        <main className="content">{items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes>
+        <main className="content">{items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes key={scopeKey(scope)}>
           <Route path="/overview" element={allowed(session, 'overview.read', scope) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="没有总览查看权限" />} />
           <Route path="/actions" element={allowed(session, 'actions.read', scope) ? <ActionsPage scope={scope} queryKey={key} /> : <Empty description="没有操作记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />

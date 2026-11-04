@@ -13,7 +13,7 @@ test('no session means no resource calls and no fabricated admin dashboard', asy
   await expect(page.getByRole('navigation')).toHaveCount(0);
 });
 
-test('scope change clears projections; unknown is not rendered as successful or retryable', async ({ page }) => {
+test('scope change clears projections; unknown is not rendered as successful or retryable', async ({ page }, testInfo) => {
   await page.route('**/admin/v1/**', async route => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/session')) return route.fulfill({ json: session() });
@@ -27,6 +27,7 @@ test('scope change clears projections; unknown is not rendered as successful or 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '运行总览' })).toBeVisible();
   await expect(page.locator('.metric-value').nth(1)).toHaveText('31');
+  await page.screenshot({ path: testInfo.outputPath('overview-fixture.png'), fullPage: true });
   await page.getByRole('combobox', { name: '访问范围' }).click();
   await page.getByText('预发布环境 · tenant_beta', { exact: true }).last().click();
   await expect(page.locator('.metric-value').nth(1)).toHaveText('5');
