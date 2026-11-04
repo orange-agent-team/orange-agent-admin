@@ -15,6 +15,7 @@ export interface AdminAction {
   created_at: string; expires_at: string; business_ref?: string; reconciliation_case_id?: string;
 }
 export interface ActionList { data: AdminAction[]; next_cursor?: string }
+export interface NodeView { node_id: string; region_id: string; status: 'pending' | 'online' | 'draining' | 'offline' | 'quarantined' | 'revoked'; version: string; health_report_id?: string }
 export interface ErrorBody { code: string; message: string; request_id: string; retry_class: string }
 
 const ajv = new Ajv2020({ strict: false, allErrors: false });
@@ -25,10 +26,12 @@ const validators = {
   AdminSession: ajv.compile<AdminSession>({ $ref: `${schema.$id}#/$defs/AdminSession` }),
   Overview: ajv.compile<Overview>({ $ref: `${schema.$id}#/$defs/Overview` }),
   AdminAction: ajv.compile<AdminAction>({ $ref: `${schema.$id}#/$defs/AdminAction` }),
+  AdminActionCreate: ajv.compile<AdminAction['request']>({ $ref: `${schema.$id}#/$defs/AdminActionCreate` }),
+  Node: ajv.compile<NodeView>({ $ref: `${schema.$id}#/$defs/Node` }),
   AdminActionList: ajv.compile<ActionList>({ $ref: `${schema.$id}#/$defs/AdminActionList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

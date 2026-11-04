@@ -5,6 +5,30 @@ import { action, otherScope, session, staging } from './fixtures';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 describe('current session, scope and schema boundaries', () => {
+  it('binds mutation to server preview, exact ETag and stable caller-owned idempotency key', async () => {
+    const doc = action();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(doc), { status: 202, headers: { ETag: '"v2"' } }));
+    const api = new AdminClient(fetcher);
+    await api.mutateAction({ action: doc, etag: '"v2"' }, 'execute', '', 'csrf', 'same-intent');
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: 'POST', credentials: 'same-origin', redirect: 'error', headers: { 'If-Match': '"v2"', 'Idempotency-Key': 'same-intent', 'X-CSRF-Token': 'csrf' } });
+    expect(JSON.parse(fetcher.mock.calls[0][1]?.body as string)).toEqual({ payload_digest: doc.payload_digest, policy_version: doc.policy_version });
+  });
+  it('never automatically retries uncertain mutations or accepts missing ETag as confirmation', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error('lost connection'));
+    const api = new AdminClient(fetcher);
+    await expect(api.mutateAction({ action: action(), etag: '"v2"' }, 'execute', '', 'csrf', 'intent')).rejects.toMatchObject({ code: 'OUTCOME_UNCONFIRMED' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fetcher.mockResolvedValue(json(action()));
+    await expect(api.action(action().action_id, staging)).rejects.toMatchObject({ code: 'OUTCOME_UNCONFIRMED' });
+  });
+  it('rejects cross-action and cross-target results and invalid requests before dispatch', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ...action(), action_id: 'another' }), { headers: { ETag: '"v2"' } }));
+    const api = new AdminClient(fetcher);
+    await expect(api.action(action().action_id, staging)).rejects.toMatchObject({ code: 'SCOPE_MISMATCH' });
+    fetcher.mockClear();
+    await expect(api.createAction({ ...action().request, payload: { node_id: 'node_fixture', unexpected_danger: true } }, 'csrf', 'key')).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('calls the browser fetch through its global receiver', async () => {
     const original = globalThis.fetch;
     globalThis.fetch = function (this: unknown) {

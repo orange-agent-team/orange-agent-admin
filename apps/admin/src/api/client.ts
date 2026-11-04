@@ -1,4 +1,14 @@
-import { decode, type AdminSession, type Scope } from './contracts';
+import { decode, scopeKey, type AdminAction, type AdminSession, type Scope } from './contracts';
+
+export interface ActionRevision { action: AdminAction; etag: string }
+export type ActionOperation = 'approve' | 'reject' | 'execute' | 'cancel';
+const identifier = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+function assertId(value: string) { if (!identifier.test(value)) throw new Error('INVALID_IDENTIFIER'); }
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value !== null && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k,v]) => `${JSON.stringify(k)}:${stable(v)}`).join(',')}}`;
+  return JSON.stringify(value);
+}
 
 export class ApiFailure extends Error {
   constructor(public readonly status: number, public readonly code: string, public readonly requestId?: string) { super(code); }
@@ -46,6 +56,52 @@ export class AdminClient {
       throw new ApiFailure(403, 'SCOPE_MISMATCH');
     }
     return result;
+  }
+  async node(scope: Scope, nodeId: string, signal?: AbortSignal) {
+    assertId(nodeId);
+    const node = decode('Node', await this.read(`/admin/v1/nodes/${encodeURIComponent(nodeId)}?environment=${scope.environment}`, signal));
+    if (node.node_id !== nodeId) throw new ApiFailure(403, 'TARGET_MISMATCH');
+    return node;
+  }
+  private async actionRequest(path: string, init: RequestInit, expectedScope: Scope, expectedId?: string): Promise<ActionRevision> {
+    let response: Response;
+    try { response = await this.fetcher(path, { ...init, credentials: 'same-origin', cache: 'no-store', redirect: 'error' }); }
+    catch (error) { if (init.signal?.aborted) throw error; throw new ApiFailure(0, init.method === 'POST' ? 'OUTCOME_UNCONFIRMED' : 'CONNECTION_UNAVAILABLE'); }
+    let raw: unknown;
+    try { raw = await response.json(); } catch { throw new ApiFailure(response.status, 'OUTCOME_UNCONFIRMED'); }
+    if (!response.ok) {
+      try { const body = decode('Error', raw); throw new ApiFailure(response.status, body.code, body.request_id); }
+      catch (error) { if (error instanceof ApiFailure) throw error; throw new ApiFailure(response.status, 'OUTCOME_UNCONFIRMED'); }
+    }
+    let action: AdminAction;
+    try { action = decode('AdminAction', raw); } catch { throw new ApiFailure(response.status, 'OUTCOME_UNCONFIRMED'); }
+    if (scopeKey(action.request.scope) !== scopeKey(expectedScope) || (expectedId && action.action_id !== expectedId)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
+    const etag = response.headers.get('etag');
+    if (etag !== `"${action.version}"`) throw new ApiFailure(response.status, 'OUTCOME_UNCONFIRMED');
+    return { action, etag };
+  }
+  async action(actionId: string, scope: Scope, signal?: AbortSignal): Promise<ActionRevision> {
+    assertId(actionId);
+    return this.actionRequest(`/admin/v1/actions/${encodeURIComponent(actionId)}`, { signal, headers: { Accept: 'application/json' } }, scope, actionId);
+  }
+  async createAction(request: AdminAction['request'], csrf: string, key: string): Promise<ActionRevision> {
+    decode('AdminActionCreate', request);
+    const revision = await this.actionRequest('/admin/v1/actions', { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'Idempotency-Key': key,
+    }, body: JSON.stringify(request) }, request.scope);
+    if (stable(revision.action.request) !== stable(request)) throw new ApiFailure(409, 'REQUEST_MISMATCH');
+    return revision;
+  }
+  async mutateAction(revision: ActionRevision, operation: ActionOperation, reason: string, csrf: string, key: string): Promise<ActionRevision> {
+    const { action, etag } = revision;
+    assertId(action.action_id);
+    if (etag !== `"${action.version}"`) throw new Error('INVALID_ETAG');
+    const preview = { payload_digest: action.payload_digest, policy_version: action.policy_version };
+    const body = operation === 'cancel' ? { reason } : operation === 'execute' ? preview : { ...preview, decision: operation, reason };
+    const endpoint = operation === 'approve' || operation === 'reject' ? 'approvals' : operation;
+    return this.actionRequest(`/admin/v1/actions/${encodeURIComponent(action.action_id)}/${endpoint}`, { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'Idempotency-Key': key, 'If-Match': etag,
+    }, body: JSON.stringify(body) }, action.request.scope, action.action_id);
   }
   async logout(session: AdminSession): Promise<void> {
     return this.revoke(session.csrf_token);

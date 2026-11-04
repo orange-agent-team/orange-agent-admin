@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Descriptions, Drawer, Table, Tag, Typography } from 'antd';
 import { AdminClient } from '../api/client';
-import { type AdminAction, type Scope } from '../api/contracts';
+import { type AdminAction, type AdminSession, type Scope } from '../api/contracts';
+import { ActionReview, NodeActionCreate } from './ActionControls';
 import { date, Failure, Heading } from './widgets';
 const api = new AdminClient();
 
 const states: Record<string, [string, string]> = {
-  pending_approval: ['待独立批准', 'gold'], ready: ['已批准 · 待执行', 'blue'], executing: ['执行中', 'processing'],
+  pending_approval: ['待独立批准', 'gold'], ready: ['待执行', 'blue'], executing: ['执行中', 'processing'],
   succeeded: ['已完成', 'green'], failed: ['执行失败', 'red'], unknown: ['结果待核对', 'orange'],
   rejected: ['已拒绝', 'red'], cancelled: ['已取消', 'default'], expired: ['已过期', 'default'],
 };
@@ -19,13 +20,14 @@ const actionNames: Record<string, string> = {
   'feature.disable': '关闭功能', 'feature.enable': '恢复功能', 'admin.role_grant': '授予平台角色',
   'support_access.grant': '支持访问授权',
 };
-export default function ActionsPage({ scope, queryKey }: { scope: Scope; queryKey: string[] }) {
+export default function ActionsPage({ scope, queryKey, session, invalidate }: { scope: Scope; queryKey: string[]; session: AdminSession; invalidate: () => void }) {
   const [cursor, setCursor] = useState<string>();
   const [history, setHistory] = useState<(string | undefined)[]>([]);
   const [detail, setDetail] = useState<AdminAction | null>(null);
   useEffect(() => { setCursor(undefined); setHistory([]); setDetail(null); }, [scope]);
   const query = useQuery({ queryKey: [...queryKey, 'actions', cursor ?? 'first'], queryFn: ({ signal }) => api.actions(scope, cursor, signal) });
-  return <><Heading eyebrow="ACTION HISTORY" title="管理操作" description="只读查看申请、批准与执行状态，未知结果需按原记录核对。" refresh={() => { void query.refetch(); }} />
+  return <><Heading eyebrow="ACTION HISTORY" title="管理操作" description="按当前权限申请、独立批准和核对操作；执行状态与设备回收分别确认。" refresh={() => { void query.refetch(); }} />
+    <NodeActionCreate session={session} scope={scope} invalidate={invalidate} onCreated={action => { setDetail(action); void query.refetch(); }} />
     <Failure error={query.error} /><Card className="table-card"><Table<AdminAction> rowKey="action_id" loading={query.isFetching} dataSource={query.data?.data ?? []} pagination={false}
       locale={{ emptyText: query.error ? '暂时无法读取记录' : '当前范围还没有操作记录' }} scroll={{ x: 760 }} columns={[
         { title: '操作', key: 'type', render: (_, row) => <Button type="link" onClick={() => setDetail(row)}>{actionNames[row.request.action_type] ?? row.request.action_type}</Button> },
@@ -47,7 +49,7 @@ export default function ActionsPage({ scope, queryKey }: { scope: Scope; queryKe
           { key: 'policy', label: '批准政策', children: detail.approval_policy === 'maker_checker' ? '独立人员批准' : '有界止损' },
           { key: 'business', label: '业务编号', children: detail.business_ref ?? '尚未生成' },
           { key: 'case', label: '核对事项', children: detail.reconciliation_case_id ?? '无' },
-        ]} /><p className="muted">当前版本为只读工作台。批准与写操作尚未开放。</p></>}
+        ]} /><ActionReview key={detail.action_id} action={detail} session={session} invalidate={invalidate} onChanged={action => { setDetail(action); void query.refetch(); }} /></>}
     </Drawer>
   </>;
 }

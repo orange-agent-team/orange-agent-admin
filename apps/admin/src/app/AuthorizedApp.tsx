@@ -18,7 +18,7 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
   useEffect(() => () => { void client.cancelQueries(); client.clear(); }, [client]);
   const location = useLocation();
   const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }]
-    .filter(item => allowed(session, item.permission, scope));
+    .filter(item => allowed(session, item.permission, scope) && (item.path !== '/overview' || ['platform', 'tenant'].includes(scope.kind)));
   const key = [authorityKey(session), scopeKey(scope)];
   return <QueryClientProvider client={client}>
     <div className="shell">
@@ -30,11 +30,11 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
         <div className="topbar-right"><Select aria-label="访问范围" value={selected} onChange={setSelected} className="scope-select" options={session.scopes.map((s, index) => ({ value: index, label: `${envNames[s.environment]} · ${s.scope_id}` }))} />
           <Tag color={scope.environment === 'production' ? 'red' : 'default'}>{envNames[scope.environment]}</Tag><Button aria-label="退出" onClick={logout}>退出</Button></div></header>
         <main className="content">{items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes key={scopeKey(scope)}>
-          <Route path="/overview" element={allowed(session, 'overview.read', scope) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="没有总览查看权限" />} />
-          <Route path="/actions" element={allowed(session, 'actions.read', scope) ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
+          <Route path="/overview" element={allowed(session, 'overview.read', scope) && ['platform', 'tenant'].includes(scope.kind) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="此范围不提供聚合总览" />} />
+          <Route path="/actions" element={allowed(session, 'actions.read', scope) ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} session={session} invalidate={invalidate} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />
         </Routes>}</main>
-        <footer className="workspace-footer"><span>当前主体：{session.principal_id}</span><span>权限版本 {session.policy_version} · 只读工作台</span></footer>
+        <footer className="workspace-footer"><span>当前主体：{session.principal_id}</span><span>权限版本 {session.policy_version} · 服务端逐次授权</span></footer>
       </div>
     </div>
   </QueryClientProvider>;

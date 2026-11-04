@@ -1,10 +1,10 @@
 # Orange Agent Admin
 
-**代码实施已开始：** apps/admin已有可构建的只读管理入口、会话/权限边界及测试，见[实施状态](docs/implementation-status.md)。完整Admin与真实后端联调尚未完成；下方准备记录保留原文档交付时点。
+**代码实施已开始：** apps/admin已有管理身份、只读查询及节点操作/审批切片，见[实施状态](docs/implementation-status.md)与[节点操作实现](docs/action-implementation.md)。本机真实后端联调与生产认证分别记录，完整Admin尚未完成。
 
 版本：admin-prep-r1；日期：2026-11-04。独立平台管理前端仓库目录，工程ID **E11**，规划package名称 **orange-admin**。四仓库共11工程，分配为桌面2、服务端7、用户Web 1、Admin 1。
 
-本文档包已提供架构、技术、功能、接口消费、权限、实施和开工准备；设计状态DESIGN_DRAFT，产品实现NOT_STARTED，真实运行NOT_RUN。目录尚未初始化Git，没有应用代码或package清单。
+下方文档包保留原设计与准备记录。当前目录已是独立本地Git仓库，应用、锁定依赖和局部验证已存在；原计划中的NOT_STARTED/NOT_RUN描述对应文档准备时点，不能代替执行台账的当前状态。
 
 ## 阅读导航
 
