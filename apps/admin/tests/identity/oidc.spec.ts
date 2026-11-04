@@ -112,16 +112,23 @@ test('two real MFA subjects review the same immutable request and cannot bypass 
     expect(created.status()).toBe(201); const original = decode('AdminAction', await created.json());
     const reviewPage = await other.newPage(); await login(reviewPage, false, reviewer);
     await reviewPage.getByRole('link', { name: '管理操作', exact: false }).first().click();
-    // Query by immutable ID: historical lists may contain many earlier test records.
-    const detail = await reviewPage.request.get(`/admin/v1/actions/${original.action_id}`);
-    expect(detail.status()).toBe(200); const doc = decode('AdminAction', await detail.json());
-    expect(doc.request).toEqual(original.request); expect(doc.payload_digest).toBe(original.payload_digest);
+    // The reviewer uses the original ID instead of searching historical pages.
+    await reviewPage.getByRole('textbox', { name: '操作编号查询', exact: true }).fill(original.action_id);
+    await reviewPage.getByRole('button', { name: '按编号读取', exact: true }).click();
+    await reviewPage.getByRole('button', { name: '读取最新审批预览', exact: true }).click();
+    const panel = reviewPage.getByRole('region', { name: '核对与审批', exact: true });
+    await expect(panel.getByText(original.payload_digest, { exact: true })).toBeVisible();
+    await expect(panel.getByText('Real independent reviewer acceptance', { exact: false })).toBeVisible();
     const currentResponse = await reviewPage.request.get('/admin/v1/session'); const checker = decode('AdminSession', await currentResponse.json());
     expect(checker.principal_id).not.toBe(maker.principal_id);
-    const headers = { Origin: 'https://127.0.0.1:43112', 'X-CSRF-Token': checker.csrf_token, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': detail.headers().etag };
-    const approval = await reviewPage.request.post(`/admin/v1/actions/${doc.action_id}/approvals`, { headers, data: { decision: 'approve', reason: 'Independent review in second authenticated browser', payload_digest: doc.payload_digest, policy_version: doc.policy_version } });
+    await reviewPage.getByRole('textbox', { name: '审核原因', exact: true }).fill('Independent review in second authenticated browser');
+    const decisionResponse = reviewPage.waitForResponse(response => new URL(response.url()).pathname === `/admin/v1/actions/${original.action_id}/approvals` && response.request().method() === 'POST');
+    await reviewPage.getByRole('button', { name: '独立批准', exact: true }).click();
+    const approval = await decisionResponse;
     expect(approval.status()).toBe(200); const approved = decode('AdminAction', await approval.json()); expect(approved.state).toBe('ready');
-    const executed = await page.request.post(`/admin/v1/actions/${doc.action_id}/execute`, { headers: { Origin: 'https://127.0.0.1:43112', 'X-CSRF-Token': maker.csrf_token, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': approval.headers().etag }, data: { payload_digest: doc.payload_digest, policy_version: doc.policy_version } });
+    expect(approved.request).toEqual(original.request); expect(approved.payload_digest).toBe(original.payload_digest);
+    await expect(panel.getByRole('button', { name: '确认内容并执行', exact: true })).toHaveCount(0);
+    const executed = await page.request.post(`/admin/v1/actions/${original.action_id}/execute`, { headers: { Origin: 'https://127.0.0.1:43112', 'X-CSRF-Token': maker.csrf_token, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': approval.headers().etag }, data: { payload_digest: original.payload_digest, policy_version: original.policy_version } });
     expect(executed.status()).toBe(503); expect(sql(`SELECT count(*) FROM admin_node_commands WHERE node_id='${node}';`)).toBe('0');
   } finally {
     await other.close();

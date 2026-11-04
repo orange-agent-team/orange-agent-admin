@@ -9,6 +9,38 @@ const permissions = { 'node.drain': 'nodes.drain', 'node.quarantine': 'nodes.qua
 type NodeKind = keyof typeof names;
 type Pending = { key: string; run: () => Promise<ActionRevision> };
 
+export function ActionLookup({ scope, invalidate, onFound }: { scope: Scope; invalidate: () => void; onFound: (action: AdminAction) => void }) {
+  const [id, setId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const current = useRef<AbortController | undefined>(undefined);
+  useEffect(() => () => { current.current?.abort(); }, []);
+  async function find() {
+    current.current?.abort();
+    const controller = new AbortController(); current.current = controller;
+    setBusy(true); setFailed(false);
+    try {
+      const result = await api.action(id, scope, controller.signal);
+      if (!controller.signal.aborted) onFound(result.action);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setFailed(true);
+        if (error instanceof ApiFailure && [401, 403].includes(error.status)) invalidate();
+      }
+    } finally { if (!controller.signal.aborted) setBusy(false); }
+  }
+  return <section className="action-form" aria-label="按原操作编号核对">
+    <h3>按原操作编号核对</h3><p className="muted">用于独立审批或核对已提交请求，不会创建或执行新操作。</p>
+    <form onSubmit={event => { event.preventDefault(); if (id && !busy) void find(); }}>
+      <Space.Compact style={{ width: '100%' }}>
+        <Input aria-label="操作编号查询" value={id} maxLength={128} onChange={event => { current.current?.abort(); setBusy(false); setId(event.target.value); setFailed(false); }} />
+        <Button htmlType="submit" loading={busy} disabled={!id || busy}>按编号读取</Button>
+      </Space.Compact>
+    </form>
+    {failed && <Alert type="warning" showIcon title="未能读取原操作，请核对编号与当前范围。" />}
+  </section>;
+}
+
 function useIntent(session: AdminSession, invalidate: () => void, completed: (result: ActionRevision) => void, stale: () => void) {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);

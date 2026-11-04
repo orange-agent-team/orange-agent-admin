@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Descriptions, Drawer, Table, Tag, Typography } from 'antd';
 import { AdminClient } from '../api/client';
 import { type AdminAction, type AdminSession, type Scope } from '../api/contracts';
-import { ActionReview, NodeActionCreate } from './ActionControls';
+import { ActionLookup, ActionReview, NodeActionCreate } from './ActionControls';
 import { date, Failure, Heading } from './widgets';
 const api = new AdminClient();
 
@@ -28,6 +28,7 @@ export default function ActionsPage({ scope, queryKey, session, invalidate }: { 
   const query = useQuery({ queryKey: [...queryKey, 'actions', cursor ?? 'first'], queryFn: ({ signal }) => api.actions(scope, cursor, signal) });
   return <><Heading eyebrow="ACTION HISTORY" title="管理操作" description="按当前权限申请、独立批准和核对操作；执行状态与设备回收分别确认。" refresh={() => { void query.refetch(); }} />
     <NodeActionCreate session={session} scope={scope} invalidate={invalidate} onCreated={action => { setDetail(action); void query.refetch(); }} />
+    <ActionLookup scope={scope} invalidate={invalidate} onFound={setDetail} />
     <Failure error={query.error} /><Card className="table-card"><Table<AdminAction> rowKey="action_id" loading={query.isFetching} dataSource={query.data?.data ?? []} pagination={false}
       locale={{ emptyText: query.error ? '暂时无法读取记录' : '当前范围还没有操作记录' }} scroll={{ x: 760 }} columns={[
         { title: '操作', key: 'type', render: (_, row) => <Button type="link" onClick={() => setDetail(row)}>{actionNames[row.request.action_type] ?? row.request.action_type}</Button> },
