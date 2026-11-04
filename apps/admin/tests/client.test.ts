@@ -1,0 +1,59 @@
+import { describe, expect, it, vi } from 'vitest';
+import { AdminClient, ApiFailure } from '../src/api/client';
+import { allowed, authorityKey, decode } from '../src/api/contracts';
+import { action, otherScope, session, staging } from './fixtures';
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+describe('current session, scope and schema boundaries', () => {
+  it('calls the browser fetch through its global receiver', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = function (this: unknown) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(json(session()));
+    };
+    try { await expect(new AdminClient().session()).resolves.toMatchObject({ principal_id: 'auditor_fixture' }); }
+    finally { globalThis.fetch = original; }
+  });
+  it('rejects expired, unverified and ordinary tenant-role identities', async () => {
+    for (const invalid of [session({ expires_at: '2020-01-01T00:00:00Z' }), session({ mfa_verified: false }), { ...session(), roles: ['owner'] }]) {
+      const api = new AdminClient(vi.fn<typeof fetch>().mockResolvedValue(json(invalid)));
+      await expect(api.session()).rejects.toThrow();
+    }
+  });
+  it('binds cache identity to principal, policy, permissions and resource scopes', () => {
+    expect(authorityKey(session())).not.toBe(authorityKey(session({ principal_id: 'another' })));
+    expect(authorityKey(session())).not.toBe(authorityKey(session({ permissions: [] })));
+    expect(authorityKey(session())).not.toBe(authorityKey(session({ scopes: [staging] })));
+    expect(allowed(session(), 'payments.refund', staging)).toBe(false);
+    expect(allowed(session(), 'overview.read', { ...staging, scope_id: 'unauthorized' })).toBe(false);
+    expect(allowed(session(), 'overview.read', staging)).toBe(true);
+  });
+  it('does not use a valid JSON object as evidence of a valid API response', () => {
+    expect(() => decode('Overview', { success: true })).toThrow('INVALID_RESPONSE');
+    expect(() => decode('AdminActionList', { data: [{ ...action(), state: 'assumed_success' }] })).toThrow();
+  });
+  it('rejects cross-scope projections before rendering', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ data: [action(otherScope)] }));
+    await expect(new AdminClient(fetcher).actions(staging)).rejects.toMatchObject({ code: 'SCOPE_MISMATCH' });
+  });
+  it('uses same-origin credentials, no-store, and propagates cancellation', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(session()));
+    const controller = new AbortController();
+    await new AdminClient(fetcher).session(controller.signal);
+    expect(fetcher).toHaveBeenCalledWith('/admin/v1/session', expect.objectContaining({ credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal }));
+  });
+  it('does not leak an untrusted server error message or replay a rejected read', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ code: 'FORBIDDEN', message: 'secret diagnostic', request_id: 'req_fixture', retry_class: 'never' }, 403));
+    try { await new AdminClient(fetcher).session(); throw new Error('expected rejection'); }
+    catch (error) { expect(error).toBeInstanceOf(ApiFailure); expect((error as Error).message).toBe('FORBIDDEN'); }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('revokes the server session with CSRF and stable-per-request intent, no bearer leak', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    await new AdminClient(fetcher).logout(session());
+    const [, options] = fetcher.mock.calls[0];
+    expect(options?.method).toBe('DELETE');
+    expect(options?.headers).toEqual(expect.objectContaining({ 'X-CSRF-Token': session().csrf_token, 'Idempotency-Key': expect.any(String) }));
+    expect(JSON.stringify(options)).not.toContain('Authorization');
+  });
+});
