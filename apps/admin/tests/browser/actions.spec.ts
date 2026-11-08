@@ -1,6 +1,6 @@
 //! Explicit API substitutes test UI behavior only; real MFA/PostgreSQL is in identity tests.
 import { expect, test } from '@playwright/test';
-import { action, session, staging } from '../fixtures';
+import { action, scopePermissions, session, staging } from '../fixtures';
 import type { AdminAction } from '../../src/api/contracts';
 
 const operator = () => session({ principal_id: 'maker_fixture', roles: ['compute_operator'], scopes: [staging], permissions: [
@@ -12,6 +12,7 @@ test('uncertain create freezes intent; explicit reconciliation reuses the same k
   await page.route('**/admin/v1/**', async route => {
     const request = route.request(); const url = new URL(request.url());
     if (url.pathname.endsWith('/session')) return route.fulfill({ json: operator() });
+    if (url.pathname.endsWith('/session/permissions')) return route.fulfill({ json: scopePermissions(staging, operator()) });
     if (url.pathname.includes('/nodes/')) return route.fulfill({ json: { node_id: 'node_fixture', region_id: 'region_fixture', status: 'online', version: 'v1' } });
     if (url.pathname.endsWith('/actions') && request.method() === 'GET') return route.fulfill({ json: { data: created ? [created] : [] } });
     if (url.pathname.endsWith('/actions') && request.method() === 'POST') {
@@ -44,6 +45,7 @@ test('maker cannot self approve; version-conflict response never displays execut
     const url = new URL(route.request().url());
     if (route.request().method() === 'POST') { writes++; return route.fulfill({ status: 412, json: { code: 'VERSION_CONFLICT', message: 'fixture version conflict', request_id: 'req_fixture', retry_class: 'never' } }); }
     if (url.pathname.endsWith('/session')) return route.fulfill({ json: operator() });
+    if (url.pathname.endsWith('/session/permissions')) return route.fulfill({ json: scopePermissions(staging, operator()) });
     if (url.pathname.endsWith('/actions')) return route.fulfill({ json: { data: [doc] } });
     return route.fulfill({ headers: { ETag: '"v1"' }, json: doc });
   });

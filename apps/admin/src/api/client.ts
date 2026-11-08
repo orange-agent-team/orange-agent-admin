@@ -57,6 +57,30 @@ export class AdminClient {
     }
     return result;
   }
+  async scopePermissions(session: AdminSession, scope: Scope, signal?: AbortSignal) {
+    const result = decode('AdminScopePermissions', await this.read(`/admin/v1/session/permissions?${this.query(scope)}`, signal));
+    if (result.principal_id !== session.principal_id || result.policy_version !== session.policy_version || scopeKey(result.scope) !== scopeKey(scope))
+      throw new ApiFailure(403, 'SCOPE_MISMATCH');
+    return result;
+  }
+  async auditEvents(scope: Scope, cursor?: string, signal?: AbortSignal) {
+    const result = decode('AuditEventList', await this.read(`/admin/v1/audit-events?${this.query(scope, cursor)}&limit=50`, signal));
+    for (const event of result.data) this.auditScope(event.scope, scope);
+    if (result.data.some(event => event.result !== 'recorded')) throw new ApiFailure(0, 'INVALID_RESPONSE');
+    return result;
+  }
+  private auditScope(actual: Scope, selected: Scope) {
+    if (actual.environment !== selected.environment || (selected.kind !== 'platform' && scopeKey(actual) !== scopeKey(selected)))
+      throw new ApiFailure(403, 'SCOPE_MISMATCH');
+  }
+  async auditEvent(scope: Scope, id: string, signal?: AbortSignal) {
+    assertId(id);
+    const event = decode('AuditEvent', await this.read(`/admin/v1/audit-events/${encodeURIComponent(id)}?environment=${encodeURIComponent(scope.environment)}`, signal));
+    this.auditScope(event.scope, scope);
+    if (event.event_id !== id) throw new ApiFailure(403, 'TARGET_MISMATCH');
+    if (event.result !== 'recorded') throw new ApiFailure(0, 'INVALID_RESPONSE');
+    return event;
+  }
   async node(scope: Scope, nodeId: string, signal?: AbortSignal) {
     assertId(nodeId);
     const node = decode('Node', await this.read(`/admin/v1/nodes/${encodeURIComponent(nodeId)}?environment=${scope.environment}`, signal));

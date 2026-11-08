@@ -4,11 +4,18 @@ import path from 'node:path';
 import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
-if (!process.version.startsWith('v22.23.2')) throw new Error('Use the pinned Node 22.23.2 toolchain');
+if (process.version !== 'v22.23.2') throw new Error('Use the pinned Node 22.23.2 toolchain');
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const cwd = path.join(root, 'apps/admin');
 const contracts = path.join(root, 'docs/contracts');
 const snapshot = JSON.parse(readFileSync(path.join(contracts, 'snapshot.json'), 'utf8'));
+if (snapshot.source_repository !== 'orange-agent-server' || !/^[0-9a-f]{40}$/.test(snapshot.source_commit ?? '')) throw new Error('Fixed producer commit required');
+const expectedSources = { 'admin.openapi.json': 'contracts/openapi/admin.v1.json', 'admin.schema.json': 'contracts/json-schema/admin.schema.json' };
+if (Object.keys(snapshot.files).sort().join() !== Object.keys(expectedSources).sort().join()) throw new Error('Unexpected snapshot inventory');
+for (const [name, entry] of Object.entries(snapshot.files)) if (entry.source !== expectedSources[name]) throw new Error('Unexpected contract origin path');
+const api = JSON.parse(readFileSync(path.join(contracts, 'admin.openapi.json'), 'utf8'));
+if (api.info.version !== snapshot.openapi_version) throw new Error('Contract version differs from snapshot');
+
 for (const [name, entry] of Object.entries(snapshot.files)) {
   const actual = createHash('sha256').update(readFileSync(path.join(contracts, name))).digest('hex');
   if (actual !== entry.sha256) throw new Error(`Contract snapshot changed: ${name}`);

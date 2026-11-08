@@ -1,4 +1,4 @@
-import type { AdminSession, AdminAction, Scope } from '../src/api/contracts';
+import type { AdminSession, AdminAction, Scope, AuditEvent } from '../src/api/contracts';
 
 export const staging: Scope = { environment: 'staging', kind: 'tenant', scope_id: 'tenant_alpha' };
 export const otherScope: Scope = { environment: 'staging', kind: 'tenant', scope_id: 'tenant_beta' };
@@ -15,4 +15,12 @@ export function action(scope = staging): AdminAction {
     payload_digest: 'a'.repeat(64), policy_version: 'policy_fixture_1', approval_policy: 'single_operator',
     required_approvals: 0, approvals: [], state: 'unknown', version: 'v2',
     created_at: '2026-11-04T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', reconciliation_case_id: 'case_fixture_1' };
+}
+
+export function scopePermissions(scope = staging, subject = session(), permissions = subject.permissions) {
+  return { principal_id: subject.principal_id, scope, permissions, policy_version: subject.policy_version };
+}
+export function auditEvent(scope = staging, id = 'event_fixture'): AuditEvent {
+  return { event_id: id, actor_id: 'operator_fixture', scope, event_type: 'action.created', action_id: 'action_fixture_1',
+    result: 'recorded', occurred_at: '2026-11-04T00:00:00Z', request_id: null, version: 'record-v1' };
 }

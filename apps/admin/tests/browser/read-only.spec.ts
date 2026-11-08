@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { action, session, staging } from '../fixtures';
+import { action, scopePermissions, session, staging } from '../fixtures';
 
 test('no session means no resource calls and no fabricated admin dashboard', async ({ page }) => {
   const paths: string[] = [];
@@ -18,6 +18,7 @@ test('scope change clears projections; unknown is not rendered as successful or 
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/session')) return route.fulfill({ json: session() });
     const scope = url.searchParams.get('scope_id') === 'tenant_beta' ? session().scopes[1] : staging;
+    if (url.pathname.endsWith('/session/permissions')) return route.fulfill({ json: scopePermissions(scope) });
     if (url.pathname.endsWith('/overview')) return route.fulfill({ json: { as_of: '2026-11-04T00:00:00Z', scope,
       queued_jobs: scope.scope_id === 'tenant_alpha' ? 31 : 5, running_jobs: 12, unknown_actions: 2,
       open_reconciliation_cases: 3, quarantined_nodes: 1 } });
@@ -43,6 +44,7 @@ test('revoked permission hides data and does not reuse a cached success', async 
   await page.route('**/admin/v1/**', async route => {
     if (revoked) return route.fulfill({ status: 403, json: { code: 'FORBIDDEN', message: 'revoked', request_id: 'req_revoked', retry_class: 'never' } });
     if (new URL(route.request().url()).pathname.endsWith('/session')) return route.fulfill({ json: session() });
+    if (new URL(route.request().url()).pathname.endsWith('/session/permissions')) return route.fulfill({ json: scopePermissions() });
     return route.fulfill({ json: { as_of: '2026-11-04T00:00:00Z', scope: staging, queued_jobs: 31, running_jobs: 12, unknown_actions: 2, open_reconciliation_cases: 3, quarantined_nodes: 1 } });
   });
   await page.goto('/');

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AdminClient, ApiFailure } from '../src/api/client';
 import { allowed, authorityKey, decode } from '../src/api/contracts';
-import { action, otherScope, session, staging } from './fixtures';
+import { action, auditEvent, scopePermissions, otherScope, session, staging } from './fixtures';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 describe('current session, scope and schema boundaries', () => {
@@ -80,4 +80,45 @@ describe('current session, scope and schema boundaries', () => {
     expect(options?.headers).toEqual(expect.objectContaining({ 'X-CSRF-Token': session().csrf_token, 'Idempotency-Key': expect.any(String) }));
     expect(JSON.stringify(options)).not.toContain('Authorization');
   });
+  it('accepts honest absent trace and rejects foreign audit scope or unrelated event', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ data: [auditEvent()] }));
+    const api = new AdminClient(fetcher);
+    expect((await api.auditEvents(staging)).data[0].request_id).toBeNull();
+    fetcher.mockResolvedValue(json({ data: [auditEvent(otherScope)] }));
+    await expect(api.auditEvents(staging)).rejects.toMatchObject({ code: 'SCOPE_MISMATCH' });
+    fetcher.mockResolvedValue(json(auditEvent(staging, 'different')));
+    await expect(api.auditEvent(staging, 'event_fixture')).rejects.toMatchObject({ code: 'TARGET_MISMATCH' });
+    fetcher.mockResolvedValue(json({ data: [{ ...auditEvent(), result: 'business_succeeded' }] }));
+    await expect(api.auditEvents(staging)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
+  it('allows platform audit aggregation only within its environment', async () => {
+    const scope = { ...staging, kind: 'platform' as const, scope_id: 'platform' };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ data: [auditEvent(staging), auditEvent(otherScope)] }));
+    const api = new AdminClient(fetcher);
+    expect((await api.auditEvents(scope)).data).toHaveLength(2);
+    fetcher.mockResolvedValue(json({ data: [auditEvent({ ...staging, environment: 'production' })] }));
+    await expect(api.auditEvents(scope)).rejects.toMatchObject({ code: 'SCOPE_MISMATCH' });
+  });
+  it('binds scope permissions to current subject, scope and policy independently of the session aggregate', async () => {
+    const subject = session({ permissions: ['overview.read', 'audit.read'] });
+    const correct = scopePermissions(staging, subject, ['overview.read']);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(correct));
+    const api = new AdminClient(fetcher);
+    expect((await api.scopePermissions(subject, staging)).permissions).toEqual(['overview.read']);
+    for (const changed of [{ ...correct, principal_id: 'foreign' }, { ...correct, scope: otherScope }, { ...correct, policy_version: 'new-policy' }]) {
+      fetcher.mockResolvedValue(json(changed));
+      await expect(api.scopePermissions(subject, staging)).rejects.toMatchObject({ code: 'SCOPE_MISMATCH' });
+    }
+    fetcher.mockResolvedValue(json({ ...correct, unrestricted_admin: true }));
+    await expect(api.scopePermissions(subject, staging)).rejects.toThrow('INVALID_RESPONSE');
+  });
+  it('rejects dangerous audit fields and malformed detail identities without mutation or retry', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ ...auditEvent(), credential: 'never render' }));
+    const api = new AdminClient(fetcher);
+    await expect(api.auditEvent(staging, 'event_fixture')).rejects.toThrow('INVALID_RESPONSE');
+    fetcher.mockClear();
+    await expect(api.auditEvent(staging, '../admin')).rejects.toThrow('INVALID_IDENTIFIER');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
 });

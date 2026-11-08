@@ -16,6 +16,9 @@ export interface AdminAction {
 }
 export interface ActionList { data: AdminAction[]; next_cursor?: string }
 export interface NodeView { node_id: string; region_id: string; status: 'pending' | 'online' | 'draining' | 'offline' | 'quarantined' | 'revoked'; version: string; health_report_id?: string }
+export interface AdminScopePermissions { principal_id: string; scope: Scope; permissions: string[]; policy_version: string }
+export interface AuditEvent { event_id: string; actor_id: string; action_id?: string; scope: Scope; event_type: string; result: string; occurred_at: string; request_id: string | null; version: string }
+export interface AuditEventList { data: AuditEvent[]; next_cursor?: string }
 export interface ErrorBody { code: string; message: string; request_id: string; retry_class: string }
 
 const ajv = new Ajv2020({ strict: false, allErrors: false });
@@ -29,9 +32,12 @@ const validators = {
   AdminActionCreate: ajv.compile<AdminAction['request']>({ $ref: `${schema.$id}#/$defs/AdminActionCreate` }),
   Node: ajv.compile<NodeView>({ $ref: `${schema.$id}#/$defs/Node` }),
   AdminActionList: ajv.compile<ActionList>({ $ref: `${schema.$id}#/$defs/AdminActionList` }),
+  AdminScopePermissions: ajv.compile<AdminScopePermissions>({ $ref: `${schema.$id}#/$defs/AdminScopePermissions` }),
+  AuditEvent: ajv.compile<AuditEvent>({ $ref: `${schema.$id}#/$defs/AuditEvent` }),
+  AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

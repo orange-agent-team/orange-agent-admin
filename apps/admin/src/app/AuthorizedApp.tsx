@@ -7,6 +7,7 @@ import { allowed, authorityKey, scopeKey, type AdminSession, type Scope } from '
 import { date, envNames, Failure, Heading } from './widgets';
 const api = new AdminClient();
 const ActionsPage = lazy(() => import('./ActionsPage'));
+const AuditPage = lazy(() => import('./AuditPage'));
 
 export default function AuthorizedApp({ session, invalidate, logout }: { session: AdminSession; invalidate: () => void; logout: () => void }) {
   const [selected, setSelected] = useState(0);
@@ -17,9 +18,14 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
   }), [scope, session, invalidate]);
   useEffect(() => () => { void client.cancelQueries(); client.clear(); }, [client]);
   const location = useLocation();
-  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }]
-    .filter(item => allowed(session, item.permission, scope) && (item.path !== '/overview' || ['platform', 'tenant'].includes(scope.kind)));
   const key = [authorityKey(session), scopeKey(scope)];
+  const scopeAuthority = useQuery({ queryKey: [...key, 'scope-permissions'], queryFn: ({ signal }) => api.scopePermissions(session, scope, signal) }, client);
+  const scopedSession: AdminSession = { ...session, scopes: [scope], permissions: scopeAuthority.data?.permissions ?? [] };
+  const permitted = (permission: string) => !scopeAuthority.isFetching && !scopeAuthority.error && !!scopeAuthority.data && allowed(scopedSession, permission, scope);
+
+  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
+    .filter(item => permitted(item.permission) && (item.path !== '/overview' || ['platform', 'tenant'].includes(scope.kind)));
+
   return <QueryClientProvider client={client}>
     <div className="shell">
       <aside className="sidebar"><div className="brand"><span className="brand-mark">o</span> orange</div><div className="sidebar-kicker">PLATFORM ADMIN</div>
@@ -29,9 +35,10 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
       <div className="workspace"><header className="topbar"><div><span className="muted">工作空间</span><span className="slash">/</span><strong>平台运营</strong></div>
         <div className="topbar-right"><Select aria-label="访问范围" value={selected} onChange={setSelected} className="scope-select" options={session.scopes.map((s, index) => ({ value: index, label: `${envNames[s.environment]} · ${s.scope_id}` }))} />
           <Tag color={scope.environment === 'production' ? 'red' : 'default'}>{envNames[scope.environment]}</Tag><Button aria-label="退出" onClick={logout}>退出</Button></div></header>
-        <main className="content">{items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes key={scopeKey(scope)}>
-          <Route path="/overview" element={allowed(session, 'overview.read', scope) && ['platform', 'tenant'].includes(scope.kind) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="此范围不提供聚合总览" />} />
-          <Route path="/actions" element={allowed(session, 'actions.read', scope) ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} session={session} invalidate={invalidate} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
+        <main className="content">{scopeAuthority.isFetching ? <div className="loading"><Spin /></div> : scopeAuthority.error ? <Failure error={scopeAuthority.error} /> : items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes key={scopeKey(scope)}>
+          <Route path="/overview" element={permitted('overview.read') && ['platform', 'tenant'].includes(scope.kind) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="此范围不提供聚合总览" />} />
+          <Route path="/actions" element={permitted('actions.read') ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
+          <Route path="/audit-events" element={permitted('audit.read') ? <Suspense fallback={<Spin />}><AuditPage scope={scope} queryKey={key} /></Suspense> : <Empty description="没有审计记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />
         </Routes>}</main>
         <footer className="workspace-footer"><span>当前主体：{session.principal_id}</span><span>权限版本 {session.policy_version} · 服务端逐次授权</span></footer>
