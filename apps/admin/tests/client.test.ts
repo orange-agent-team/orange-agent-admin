@@ -122,3 +122,17 @@ describe('current session, scope and schema boundaries', () => {
   });
 
 });
+
+describe('reconciliation case directory', () => {
+  const scope = {environment:'dev', kind:'tenant', scope_id:'owner-a'} as const;
+  const row = {case_id:'case-a', owner_id:'owner-a', business_ref:'operation-a', next_check_at:'2026-11-19T10:00:00Z', state:'waiting_external', version:'2'};
+  it('checks the selected owner and exact detail target before display', async () => {
+    const fetcher=vi.fn<typeof fetch>().mockResolvedValueOnce(json({data:[row],next_cursor:'opaque'})).mockResolvedValueOnce(json({...row,case_id:'other'})).mockResolvedValueOnce(json({data:[{...row,owner_id:'other'}]}));
+    const client=new AdminClient(fetcher);
+    expect((await client.cases(scope)).data).toEqual([row]);
+    await expect(client.reconciliationCase(scope,'case-a')).rejects.toMatchObject({code:'TARGET_MISMATCH'});
+    await expect(client.cases(scope,'opaque')).rejects.toMatchObject({code:'SCOPE_MISMATCH'});
+    await expect(client.cases({...scope,kind:'region'})).rejects.toMatchObject({code:'SCOPE_MISMATCH'});
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+});

@@ -19,12 +19,20 @@ export interface NodeView { node_id: string; region_id: string; status: 'pending
 export interface AdminScopePermissions { principal_id: string; scope: Scope; permissions: string[]; policy_version: string }
 export interface AuditEvent { event_id: string; actor_id: string; action_id?: string; scope: Scope; event_type: string; result: string; occurred_at: string; request_id: string | null; version: string }
 export interface AuditEventList { data: AuditEvent[]; next_cursor?: string }
+export interface ReconciliationCase {
+  case_id: string; owner_id: string; business_ref: string;
+  state: 'open' | 'investigating' | 'waiting_external' | 'resolved';
+  next_check_at: string; version: string;
+}
+export interface CasePage { data: ReconciliationCase[]; next_cursor?: string }
 export interface ErrorBody { code: string; message: string; request_id: string; retry_class: string }
 
 const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
 const validators = {
+  ReconciliationCase: ajv.compile<ReconciliationCase>({ $ref: `${schema.$id}#/$defs/ReconciliationCase` }),
+  ReconciliationCaseList: ajv.compile<CasePage>({ $ref: `${schema.$id}#/$defs/ReconciliationCaseList` }),
   SessionRevocationContext: ajv.compile<{ csrf_token: string }>({ $ref: `${schema.$id}#/$defs/SessionRevocationContext` }),
   AdminSession: ajv.compile<AdminSession>({ $ref: `${schema.$id}#/$defs/AdminSession` }),
   Overview: ajv.compile<Overview>({ $ref: `${schema.$id}#/$defs/Overview` }),
@@ -37,7 +45,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

@@ -63,6 +63,19 @@ export class AdminClient {
       throw new ApiFailure(403, 'SCOPE_MISMATCH');
     return result;
   }
+  async cases(scope: Scope, cursor?: string, signal?: AbortSignal) {
+    if (!['platform', 'tenant'].includes(scope.kind)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
+    const result = decode('ReconciliationCaseList', await this.read(`/admin/v1/reconciliation-cases?${this.query(scope, cursor)}&limit=50`, signal));
+    if (scope.kind === 'tenant' && result.data.some(row => row.owner_id !== scope.scope_id)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
+    return result;
+  }
+  async reconciliationCase(scope: Scope, id: string, signal?: AbortSignal) {
+    assertId(id);
+    if (!['platform', 'tenant'].includes(scope.kind)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
+    const row = decode('ReconciliationCase', await this.read(`/admin/v1/reconciliation-cases/${encodeURIComponent(id)}?environment=${encodeURIComponent(scope.environment)}`, signal));
+    if (row.case_id !== id || (scope.kind === 'tenant' && row.owner_id !== scope.scope_id)) throw new ApiFailure(403, 'TARGET_MISMATCH');
+    return row;
+  }
   async auditEvents(scope: Scope, cursor?: string, signal?: AbortSignal) {
     const result = decode('AuditEventList', await this.read(`/admin/v1/audit-events?${this.query(scope, cursor)}&limit=50`, signal));
     for (const event of result.data) this.auditScope(event.scope, scope);
