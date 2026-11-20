@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type TextPriceDraft } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type TextPriceDraft, type ConsentReview, type GrantDetail } from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
@@ -141,6 +141,7 @@ export function NodeActionCreate({ session, scope, invalidate, onCreated }: { se
 
 export function ActionReview({ action, session, invalidate, onChanged }: { action: AdminAction; session: AdminSession; invalidate: () => void; onChanged: (action: AdminAction) => void }) {
   const [revision, setRevision] = useState<ActionRevision>();
+  const [support, setSupport] = useState<ConsentReview | GrantDetail>();
   const [price, setPrice] = useState<TextPriceDraft>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -149,10 +150,23 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined);
+    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined); setSupport(undefined);
     try {
       const result = await api.action(action.action_id, action.request.scope);
       const request = result.action.request;
+      if (request.action_type === 'support_access.grant') {
+        const row=await api.supportConsent(request.scope,String(request.payload.user_authorization_id));
+        const ids=row.resources.map(r=>r.artifact_id).sort();
+        if(row.ticket_id!==request.ticket_id || row.target_version!==request.target_version || row.subject_user_id!==request.payload.subject_user_id ||
+            !Array.isArray(request.payload.resource_ids) || JSON.stringify(ids)!==JSON.stringify([...request.payload.resource_ids].sort()) ||
+            JSON.stringify(request.payload.content_fields)!==JSON.stringify(row.content_fields) ||
+            Date.parse(String(request.payload.expires_at))>Date.parse(row.expires_at))throw Error('SUPPORT_CONSENT_MISMATCH');
+        if(active.current)setSupport(row);
+      } else if(request.action_type==='support_access.revoke'){
+        const row=await api.supportGrant(request.scope,String(request.payload.grant_id));
+        if(row.ticket_id!==request.ticket_id)throw Error('SUPPORT_GRANT_MISMATCH');
+        if(active.current)setSupport(row);
+      }
       if (request.action_type === 'pricing.publish') {
         const terms = await api.priceDraft(request.scope, String(request.payload.price_version_id));
         if (terms.target_version !== request.target_version || terms.review_report_id !== request.payload.review_report_id ||
@@ -169,8 +183,9 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const caseEdit = action.request.action_type === 'case.update';
   const closingCase = caseEdit && action.request.payload.change === 'close';
   const pricing = action.request.action_type === 'pricing.publish';
-  const specific = pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind];
-  const checkerPermission = pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const supportPermission = action.request.action_type==='support_access.grant'?'support.grant':action.request.action_type==='support_access.revoke'?'support.revoke':undefined;
+  const specific = supportPermission ?? (pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
+  const checkerPermission = supportPermission==='support.grant' ? 'support.grant.approve' : pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -186,6 +201,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'state', label: '当前状态', children: doc.state },
       { key: 'scope', label: '执行范围', children: `${doc.request.scope.environment} / ${doc.request.scope.kind} / ${doc.request.scope.scope_id}` },
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
+      ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
       ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>输入和输出费率均为每千计量单位的微积分。1 积分等于 1,000,000 微积分，两部分费用分别向上取整。</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
       { key: 'digest', label: '服务端内容摘要', children: <Typography.Text copyable>{doc.payload_digest}</Typography.Text> },
       { key: 'policy', label: '审批政策版本', children: doc.policy_version },

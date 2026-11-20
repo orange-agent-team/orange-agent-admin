@@ -27,6 +27,20 @@ export interface ReconciliationCase {
 export type CaseEdit = {case_id:string} & (
   {change:'assign'; assignee_id:string} | {change:'note';note:string} | {change:'close';resolution_ref:string}
 );
+export interface SupportVersion { artifact_id:string; version_id:string }
+export interface ConsentReview {
+  user_authorization_id:string; subject_user_id:string; owner_id:string; ticket_id:string;
+  purpose:string; resources:SupportVersion[]; content_fields:['file_content']; expires_at:string; target_version:string;
+}
+export interface SupportGrant {
+  grant_id:string; subject_user_id:string; resource_ids:string[]; content_fields:string[];
+  expires_at:string; status:'active'|'expired'|'unavailable'|'revoked'; version:string;
+}
+export interface GrantDetail extends SupportGrant {
+  owner_id:string; ticket_id:string; user_authorization_id:string; beneficiary_id:string; checker_id:string; resources:SupportVersion[];
+}
+export interface SupportExcerpt {grant_id:string;resource_id:string;content_field:'file_content';content:string;truncated:boolean;audit_event_id:string}
+interface GrantPage {data:SupportGrant[];next_cursor?:string}
 export interface TextPriceDraftTerms {
   scope: Scope; node_id: string; execution_profile_id: string; meter_profile_digest: string;
   input_price: string; output_price: string; output_limit: number; fee_bps: number;
@@ -46,6 +60,10 @@ const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
 const validators = {
+  SupportContent: ajv.compile<SupportExcerpt>({ $ref: `${schema.$id}#/$defs/SupportContent` }),
+  SupportGrantList: ajv.compile<GrantPage>({ $ref: `${schema.$id}#/$defs/SupportGrantList` }),
+  SupportGrantDetail: ajv.compile<GrantDetail>({ $ref: `${schema.$id}#/$defs/SupportGrantDetail` }),
+  SupportConsentReview: ajv.compile<ConsentReview>({ $ref: `${schema.$id}#/$defs/SupportConsentReview` }),
   TextPriceDraftList: ajv.compile<TextPriceDraftList>({ $ref: `${schema.$id}#/$defs/TextPriceDraftList` }),
   TextPriceDraft: ajv.compile<TextPriceDraft>({ $ref: `${schema.$id}#/$defs/TextPriceDraft` }),
   TextPriceDraftTerms: ajv.compile<TextPriceDraftTerms>({ $ref: `${schema.$id}#/$defs/TextPriceDraftTerms` }),
@@ -64,7 +82,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

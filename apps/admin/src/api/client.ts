@@ -63,6 +63,30 @@ export class AdminClient {
       throw new ApiFailure(403, 'SCOPE_MISMATCH');
     return result;
   }
+  async supportConsent(scope: Scope, id: string, signal?:AbortSignal) {
+    assertId(id);
+    const row=decode('SupportConsentReview',await this.read(`/admin/v1/support-authorizations/${encodeURIComponent(id)}?${this.query(scope)}`,signal));
+    if(scope.environment!=='dev'||scope.kind!=='tenant'||row.owner_id!==scope.scope_id||row.user_authorization_id!==id)throw new ApiFailure(403,'TARGET_MISMATCH');
+    return row;
+  }
+  async supportGrants(scope:Scope,cursor?:string,signal?:AbortSignal) {
+    return decode('SupportGrantList',await this.read('/admin/v1/support-grants?'+this.query(scope,cursor),signal));
+  }
+  async supportGrant(scope:Scope,id:string,signal?:AbortSignal) {
+    assertId(id);
+    const row=decode('SupportGrantDetail',await this.read(`/admin/v1/support-grants/${encodeURIComponent(id)}?${this.query(scope)}`,signal));
+    if(scope.environment!=='dev'||scope.kind!=='tenant'||row.owner_id!==scope.scope_id||row.grant_id!==id)throw new ApiFailure(403,'TARGET_MISMATCH');
+    return row;
+  }
+  async supportExcerpt(grant:string,resource:string,offset:number,limit:number,csrf:string,key:string) {
+    assertId(grant);assertId(resource);
+    if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>65536)throw Error('INVALID_RANGE');
+    const {raw}=await this.jsonRequest('/admin/v1/support-content',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key},
+      body:JSON.stringify({grant_id:grant,resource_id:resource,content_field:'file_content',offset,limit_bytes:limit})});
+    const row=decode('SupportContent',raw);
+    if(row.grant_id!==grant||row.resource_id!==resource||row.content_field!=='file_content'||new TextEncoder().encode(row.content).length>limit)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
+    return row;
+  }
   async priceDrafts(scope: Scope, cursor?: string, signal?: AbortSignal) {
     const rows = decode('TextPriceDraftList', await this.read(`/admin/v1/price-drafts?${this.query(scope, cursor)}`, signal));
     if (rows.data.some(row => scopeKey(row.terms.scope) !== scopeKey(scope))) throw new ApiFailure(403, 'SCOPE_MISMATCH');
