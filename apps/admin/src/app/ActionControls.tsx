@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type TextPriceDraft, type ConsentReview, type GrantDetail } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type TextPriceDraft, type ConsentReview, type GrantDetail, type RoleBinding } from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
@@ -141,6 +141,7 @@ export function NodeActionCreate({ session, scope, invalidate, onCreated }: { se
 
 export function ActionReview({ action, session, invalidate, onChanged }: { action: AdminAction; session: AdminSession; invalidate: () => void; onChanged: (action: AdminAction) => void }) {
   const [revision, setRevision] = useState<ActionRevision>();
+  const [binding,setBinding] = useState<RoleBinding>();
   const [support, setSupport] = useState<ConsentReview | GrantDetail>();
   const [price, setPrice] = useState<TextPriceDraft>();
   const [loading, setLoading] = useState(false);
@@ -150,10 +151,15 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined); setSupport(undefined);
+    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined); setSupport(undefined);setBinding(undefined);
     try {
       const result = await api.action(action.action_id, action.request.scope);
       const request = result.action.request;
+      if(['admin.role_grant','admin.role_revoke'].includes(request.action_type)){
+        const row=await api.roleBinding(request.scope,String(request.payload.principal_id),String(request.payload.role));
+        if(['pending_approval','ready'].includes(result.action.state)&&row.target_version!==request.target_version)throw Error('ROLE_BINDING_CHANGED');
+        if(active.current)setBinding(row);
+      }
       if (request.action_type === 'support_access.grant') {
         const row=await api.supportConsent(request.scope,String(request.payload.user_authorization_id));
         const ids=row.resources.map(r=>r.artifact_id).sort();
@@ -184,8 +190,10 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const closingCase = caseEdit && action.request.payload.change === 'close';
   const pricing = action.request.action_type === 'pricing.publish';
   const supportPermission = action.request.action_type==='support_access.grant'?'support.grant':action.request.action_type==='support_access.revoke'?'support.revoke':undefined;
-  const specific = supportPermission ?? (pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
-  const checkerPermission = supportPermission==='support.grant' ? 'support.grant.approve' : pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const rolePermission = action.request.action_type==='admin.role_grant'?'admins.grant':action.request.action_type==='admin.role_revoke'?'admins.revoke':undefined;
+  const isTarget=!!rolePermission && action.request.payload.principal_id===session.principal_id;
+  const specific = rolePermission ?? supportPermission ?? (pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
+  const checkerPermission = rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -201,6 +209,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'state', label: '当前状态', children: doc.state },
       { key: 'scope', label: '执行范围', children: `${doc.request.scope.environment} / ${doc.request.scope.kind} / ${doc.request.scope.scope_id}` },
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
+      ...(binding ? [{key:'binding',label:'当前平台角色绑定',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(binding,null,2)}</pre>}] : []),
       ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
       ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>输入和输出费率均为每千计量单位的微积分。1 积分等于 1,000,000 微积分，两部分费用分别向上取整。</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
       { key: 'digest', label: '服务端内容摘要', children: <Typography.Text copyable>{doc.payload_digest}</Typography.Text> },
@@ -214,12 +223,12 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       {live && ['ready', 'pending_approval'].includes(doc.state) && <>
         <label>批准、拒绝或撤回原因<Input.TextArea aria-label="审核原因" value={reason} maxLength={1000} disabled={intent.disabled} onChange={e => setReason(e.target.value)} /></label>
         <Space wrap>
-          {doc.state === 'pending_approval' && doc.requested_by !== session.principal_id && allowed(session, 'actions.approve', scope) && allowed(session, checkerPermission, scope) && <>
+          {doc.state === 'pending_approval' && doc.requested_by !== session.principal_id && !isTarget && allowed(session, 'actions.approve', scope) && allowed(session, checkerPermission, scope) && <>
             <Button disabled={intent.disabled || !reason.trim()} onClick={() => send('approve')}>独立批准</Button>
             <Button danger disabled={intent.disabled || !reason.trim()} onClick={() => send('reject')}>拒绝申请</Button>
           </>}
           {doc.state === 'pending_approval' && doc.requested_by === session.principal_id && <p>申请人不能批准自己的申请。</p>}
-          {doc.state === 'ready' && doc.request.action_type !== 'node.resume' && allowed(session, 'actions.execute', scope) && allowed(session, specific, scope) && <Button type="primary" disabled={intent.disabled} onClick={() => send('execute')}>确认内容并执行</Button>}
+          {doc.state === 'ready' && !isTarget && doc.request.action_type !== 'node.resume' && allowed(session, 'actions.execute', scope) && allowed(session, specific, scope) && <Button type="primary" disabled={intent.disabled} onClick={() => send('execute')}>确认内容并执行</Button>}
           {allowed(session, 'actions.cancel', scope) && allowed(session, specific, scope) && <Button disabled={intent.disabled || !reason.trim()} onClick={() => send('cancel')}>撤回未执行申请</Button>}
         </Space>
       </>}

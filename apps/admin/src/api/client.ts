@@ -63,6 +63,12 @@ export class AdminClient {
       throw new ApiFailure(403, 'SCOPE_MISMATCH');
     return result;
   }
+  async roleBinding(scope:Scope,principal:string,role:string,signal?:AbortSignal) {
+    assertId(principal);assertId(role);
+    const row=decode('AdminRoleBinding',await this.read(`/admin/v1/principals/${encodeURIComponent(principal)}/role-bindings/${encodeURIComponent(role)}?${this.query(scope)}`,signal));
+    if(row.principal_id!==principal||row.role!==role||scopeKey(row.scope)!==scopeKey(scope))throw new ApiFailure(403,'TARGET_MISMATCH');
+    return row;
+  }
   async supportConsent(scope: Scope, id: string, signal?:AbortSignal) {
     assertId(id);
     const row=decode('SupportConsentReview',await this.read(`/admin/v1/support-authorizations/${encodeURIComponent(id)}?${this.query(scope)}`,signal));

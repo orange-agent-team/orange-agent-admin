@@ -1,3 +1,4 @@
+import { exerciseRoles } from './real-role-bindings.mjs';
 // Actual browser + explicitly selected API. The caller owns the fixture session.
 import { exerciseCaseEdits } from './real-case-edits.mjs';
 import { chromium } from '@playwright/test';
@@ -18,7 +19,7 @@ const tls = resolve(app, '../../.local/tls'), evidence = dirname(file);
 let browser, page;
 const input = createInterface({ input: process.stdin });
 const revoked = new Promise(ok => { input.on('line', line => ok(line === 'revoked')); input.on('close', () => ok(false)); });
-const fixtureCookie = cookie => f.finance.some(a=>a.cookie===cookie);
+const fixtureCookie = cookie => [...f.finance,...f.governance].some(a=>a.cookie===cookie);
 const server = createServer({ key: readFileSync(resolve(tls, 'key.pem')), cert: readFileSync(resolve(tls, 'cert.pem')) }, (req, res) => {
   try {
     const url = new URL(req.url, origin);
@@ -87,6 +88,7 @@ try {
   const denied = await page.request.get('/admin/v1/audit-events/foreign-b?environment=dev'); if (denied.status() !== 404) throw Error('Foreign detail metadata disclosed');
   const caseEdits=await exerciseCaseEdits(browser,f,origin.origin,resolve(evidence,'case-edits-confirmed.png'),resolve(evidence,'price-confirmed.png'));
   await page.screenshot({ path: resolve(evidence, 'actual-audit.png'), fullPage: true });
+  const roleBinding=await exerciseRoles(browser,f,origin.origin,resolve(evidence,'role-revoked.png'));
   process.stdout.write('AUDIT_READY_FOR_REVOCATION\n'); if (!await revoked) throw Error('Revocation control was not confirmed');
   await page.getByRole('button', { name: '刷新数据', exact: true }).click();
   await page.getByText('没有审计记录查看权限', { exact: true }).waitFor();
@@ -99,7 +101,7 @@ try {
   const stillAuthorized = await other.json();
   if (other.status() !== 200 || !stillAuthorized.permissions.includes('audit.read') || stillAuthorized.scope.scope_id !== f.scope_c) throw Error('Other scope audit grant did not remain active');
   if (writes || foreignReads) throw Error('Unexpected UI mutation or unauthorized scope read');
-  writeFileSync(resolve(evidence, 'browser-result.json'), JSON.stringify({ passed: true, actual_api: true, legacy_trace_null: true, scope_specific_permissions: true, pagination_and_detail: true, revoked_content_cleared: true, global_aggregate_unchanged_after_scope_revocation: true, audit_ui_mutations: writes, case_edits:caseEdits, pricing:caseEdits.pricing, case_write_ui: true, session_fixture: true, mfa_issuance_certified: false }) + '\n', { mode: 0o600 });
+  writeFileSync(resolve(evidence, 'browser-result.json'), JSON.stringify({ passed: true, actual_api: true, legacy_trace_null: true, scope_specific_permissions: true, pagination_and_detail: true, revoked_content_cleared: true, global_aggregate_unchanged_after_scope_revocation: true, audit_ui_mutations: writes, role_binding:roleBinding, case_edits:caseEdits, pricing:caseEdits.pricing, case_write_ui: true, session_fixture: true, mfa_issuance_certified: false }) + '\n', { mode: 0o600 });
   console.log('PASS actual Chrome/API/PG audit scopes, pagination, original null trace and revocation clearing; explicit session fixture, no new MFA certification');
 } catch (error) {
   try { if (page) { writeFileSync(resolve(evidence, 'browser-error.json'), JSON.stringify({ error: String(error), main: await page.locator('main').innerText() }), { mode: 0o600 }); await page.screenshot({ path: resolve(evidence, 'audit-failed.png'), fullPage: true }); } } catch {}

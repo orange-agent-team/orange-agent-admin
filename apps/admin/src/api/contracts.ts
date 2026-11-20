@@ -27,6 +27,9 @@ export interface ReconciliationCase {
 export type CaseEdit = {case_id:string} & (
   {change:'assign'; assignee_id:string} | {change:'note';note:string} | {change:'close';resolution_ref:string}
 );
+export const adminRoles=['platform_admin','support_operator','compute_operator','finance_operator','security_operator','release_operator','auditor'] as const;
+export type AdminRole=typeof adminRoles[number];
+export interface RoleBinding {principal_id:string;role:AdminRole;scope:Scope;target_version:string;revision:string;state:'absent'|'active'|'expired'|'revoked';expires_at?:string}
 export interface SupportVersion { artifact_id:string; version_id:string }
 export interface ConsentReview {
   user_authorization_id:string; subject_user_id:string; owner_id:string; ticket_id:string;
@@ -60,6 +63,7 @@ const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
 const validators = {
+  AdminRoleBinding: ajv.compile<RoleBinding>({$ref:`${schema.$id}#/$defs/AdminRoleBinding`}),
   SupportContent: ajv.compile<SupportExcerpt>({ $ref: `${schema.$id}#/$defs/SupportContent` }),
   SupportGrantList: ajv.compile<GrantPage>({ $ref: `${schema.$id}#/$defs/SupportGrantList` }),
   SupportGrantDetail: ajv.compile<GrantDetail>({ $ref: `${schema.$id}#/$defs/SupportGrantDetail` }),
@@ -82,7 +86,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];
