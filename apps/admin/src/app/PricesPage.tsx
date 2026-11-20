@@ -21,8 +21,8 @@ function DraftForm({ scope, session, invalidate, onSaved }: EditorProps & { onSa
     { name: 'node_id', label: '节点标识', pattern: id },
     { name: 'execution_profile_id', label: '已审核执行配置', pattern: id },
     { name: 'meter_profile_digest', label: '可信计量配置摘要', pattern: /^[0-9a-f]{64}$/ },
-    { name: 'input_price', label: '每千输入单位价格（开发积分）', pattern: amount },
-    { name: 'output_price', label: '每千输出单位价格（开发积分）', pattern: amount },
+    { name: 'input_price', label: '每千输入单位价格（微积分）', pattern: amount },
+    { name: 'output_price', label: '每千输出单位价格（微积分）', pattern: amount },
   ] as const;
   return <Card title="创建定价草稿">
     <Form form={form} layout="vertical" disabled={intent.disabled} onFinish={values => {
@@ -81,12 +81,12 @@ export default function PricesPage(props: Props) {
   const list=useQuery({queryKey:[...queryKey,'price-drafts',cursor??'first'],queryFn:({signal})=>api.priceDrafts(scope,cursor,signal)});
   const detail=useQuery({queryKey:[...queryKey,'price-draft',selected],enabled:!!selected,queryFn:({signal})=>api.priceDraft(scope,selected!,signal)});
   function refresh(){void list.refetch();if(selected)void detail.refetch();}
-  return <><Heading title="开发算力定价" eyebrow="PRICING" description="按节点审核文本推理费率，由两位财务管理员完成发布审批。" refresh={refresh}/>
+  return <><Heading title="开发算力定价" eyebrow="PRICING" description="费率使用微积分，每 1,000,000 微积分等于 1 积分。发布需要独立批准。" refresh={refresh}/>
     {allowed(session,'pricing.draft',scope) && <DraftForm {...props} onSaved={row=>{setPages([]);setSelected(row.price_version_id);void list.refetch();}}/>}
     <Failure error={list.error}/><Table<TextPriceDraft> rowKey="price_version_id" loading={list.isFetching} pagination={false}
       dataSource={list.error?[]:list.data?.data??[]} columns={[
         {title:'价格版本',render:(_,row)=><Button type="link" onClick={()=>setSelected(row.price_version_id)}>{row.price_version_id}</Button>},
-        {title:'每千输入单位价格',render:(_,row)=>row.terms.input_price},{title:'每千输出单位价格',render:(_,row)=>row.terms.output_price},
+        {title:'每千输入单位价格（微积分）',render:(_,row)=>row.terms.input_price},{title:'每千输出单位价格（微积分）',render:(_,row)=>row.terms.output_price},
         {title:'状态',render:(_,row)=>states[row.state]},
       ]}/>
     <Space><Button disabled={!pages.length||list.isFetching} onClick={()=>setPages(v=>v.slice(0,-1))}>上一页</Button>

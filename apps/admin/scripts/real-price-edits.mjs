@@ -9,8 +9,8 @@ export async function exercisePrices(maker, checker, terms, screenshot) {
     await maker.goto('/price-drafts');
     for (const [label,value] of [
       ['节点标识',terms.node_id], ['已审核执行配置',terms.execution_profile_id],
-      ['可信计量配置摘要',terms.meter_profile_digest], ['每千输入单位价格（开发积分）',terms.input_price],
-      ['每千输出单位价格（开发积分）',terms.output_price], ['输出单位上限',terms.output_limit], ['平台费率（基点）',terms.fee_bps],
+      ['可信计量配置摘要',terms.meter_profile_digest], ['每千输入单位价格（微积分）',terms.input_price],
+      ['每千输出单位价格（微积分）',terms.output_price], ['输出单位上限',terms.output_limit], ['平台费率（基点）',terms.fee_bps],
     ]) await maker.getByLabel(label,{exact:true}).fill(String(value));
     async function submit(page, button, endpoint, status) {
       const waiting=page.waitForResponse(response=>new URL(response.url()).pathname===endpoint && response.request().method()==='POST');

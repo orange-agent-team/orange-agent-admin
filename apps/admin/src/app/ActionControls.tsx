@@ -186,7 +186,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'state', label: '当前状态', children: doc.state },
       { key: 'scope', label: '执行范围', children: `${doc.request.scope.environment} / ${doc.request.scope.kind} / ${doc.request.scope.scope_id}` },
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
-      ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>输入和输出费率均为每千计量单位的开发积分，两部分费用分别向上取整。</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
+      ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>输入和输出费率均为每千计量单位的微积分。1 积分等于 1,000,000 微积分，两部分费用分别向上取整。</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
       { key: 'digest', label: '服务端内容摘要', children: <Typography.Text copyable>{doc.payload_digest}</Typography.Text> },
       { key: 'policy', label: '审批政策版本', children: doc.policy_version },
       { key: 'expires', label: '到期时间', children: date(doc.expires_at) },
