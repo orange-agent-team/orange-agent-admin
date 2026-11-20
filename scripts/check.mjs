@@ -16,6 +16,14 @@ for (const [name, entry] of Object.entries(snapshot.files)) if (entry.source !==
 const api = JSON.parse(readFileSync(path.join(contracts, 'admin.openapi.json'), 'utf8'));
 if (api.info.version !== snapshot.openapi_version) throw new Error('Contract version differs from snapshot');
 
+const actionPolicies = api.paths['/admin/v1/actions'].post['x-action-policies'];
+const definedActions = api.components.schemas.AdminActionCreate.oneOf.map(variant => variant.properties.action_type.const);
+const casePolicy = actionPolicies.find(rule => rule.action_type === 'case.update');
+if (actionPolicies.map(rule=>rule.action_type).sort().join() !== definedActions.sort().join() ||
+    casePolicy?.approval !== 'conditional' || casePolicy.unknown_variant !== 'reject' ||
+    casePolicy.variants.close.approval !== 'maker_checker' || casePolicy.variants.close.approval_permission !== 'cases.close.approve') {
+  throw Error('Incomplete action approval policy catalog');
+}
 for (const [name, entry] of Object.entries(snapshot.files)) {
   const actual = createHash('sha256').update(readFileSync(path.join(contracts, name))).digest('hex');
   if (actual !== entry.sha256) throw new Error(`Contract snapshot changed: ${name}`);
