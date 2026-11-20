@@ -39,7 +39,7 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
         <main className="content">{scopeAuthority.isFetching ? <div className="loading"><Spin /></div> : scopeAuthority.error ? <Failure error={scopeAuthority.error} /> : items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes key={scopeKey(scope)}>
           <Route path="/overview" element={permitted('overview.read') && ['platform', 'tenant'].includes(scope.kind) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="此范围不提供聚合总览" />} />
           <Route path="/actions" element={permitted('actions.read') ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
-          <Route path="/reconciliation-cases" element={permitted('cases.read') && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin />}><CasePage scope={scope} queryKey={key}/></Suspense> : <Empty description="没有此范围的对账查看权限" />} />
+          <Route path="/reconciliation-cases" element={permitted('cases.read') && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin />}><CasePage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的对账查看权限" />} />
           <Route path="/audit-events" element={permitted('audit.read') ? <Suspense fallback={<Spin />}><AuditPage scope={scope} queryKey={key} /></Suspense> : <Empty description="没有审计记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />
         </Routes>}</main>

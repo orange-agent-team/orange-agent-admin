@@ -69,6 +69,13 @@ export class AdminClient {
     if (scope.kind === 'tenant' && result.data.some(row => row.owner_id !== scope.scope_id)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
     return result;
   }
+  async caseActivity(scope:Scope, id:string, cursor?:string, signal?:AbortSignal) {
+    assertId(id);
+    if (!['platform','tenant'].includes(scope.kind)) throw new ApiFailure(403,'SCOPE_MISMATCH');
+    const data=decode('ReconciliationCaseActivity',await this.read(`/admin/v1/reconciliation-cases/${encodeURIComponent(id)}/activity?${this.query(scope,cursor)}&limit=50`,signal));
+    if (data.case_id!==id || (scope.kind==='tenant' && data.owner_id!==scope.scope_id) || data.data.some(row=>row.payload.case_id!==id)) throw new ApiFailure(403,'TARGET_MISMATCH');
+    return data;
+  }
   async reconciliationCase(scope: Scope, id: string, signal?: AbortSignal) {
     assertId(id);
     if (!['platform', 'tenant'].includes(scope.kind)) throw new ApiFailure(403, 'SCOPE_MISMATCH');

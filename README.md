@@ -1,5 +1,8 @@
 # Orange Agent Admin
 
+财务管理员可以在授权范围中查看对账事项、分派经办人和追加备注。关闭事项需要另一位有权管理员批准，执行结果可从变更记录核对。[对账操作说明](docs/reconciliation-cases.md)
+
+
 **代码实施已开始：** apps/admin已有管理身份、只读查询及节点操作/审批切片，见[实施状态](docs/implementation-status.md)与[节点操作实现](docs/action-implementation.md)。本机真实后端联调与生产认证分别记录，完整Admin尚未完成。
 
 版本：admin-prep-r1；日期：2026-11-04。独立平台管理前端仓库目录，工程ID **E11**，规划package名称 **orange-admin**。四仓库共11工程，分配为桌面2、服务端7、用户Web 1、Admin 1。

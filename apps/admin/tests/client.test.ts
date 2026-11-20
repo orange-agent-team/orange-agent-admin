@@ -136,3 +136,22 @@ describe('reconciliation case directory', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('case changes', () => {
+  const tenant = {environment:'dev',kind:'tenant',scope_id:'test-owner'} as const;
+  const event = {action_id:'test-action',actor_id:'reviewer',version:'3',occurred_at:'2026-11-20T10:00:00Z',
+    payload:{change:'note',case_id:'owned-case',note:'A checked record'}};
+  const history = {case_id:'owned-case',owner_id:'test-owner',version:'3',data:[event]};
+  it('rejects a history entry belonging to another case, even if page metadata matches',async()=>{
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(json(history)).mockResolvedValueOnce(json({...history,data:[{...event,payload:{...event.payload,case_id:'foreign'}}]}));
+    const api = new AdminClient(fetcher);
+    expect((await api.caseActivity(tenant,'owned-case')).data[0].payload.change).toBe('note');
+    await expect(api.caseActivity(tenant,'owned-case')).rejects.toMatchObject({code:'TARGET_MISMATCH'});
+  });
+  it('rejects unrecognized case edits locally before creating an action',async()=>{
+    const fetcher=vi.fn<typeof fetch>(); const api=new AdminClient(fetcher);
+    await expect(api.createAction({scope:tenant,ticket_id:'ticket',reason:'A scoped request',target_version:'2',action_type:'case.update',
+      payload:{change:'close',case_id:'owned-case',resolution_ref:'report',balance:'1'}},'csrf','intent')).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});

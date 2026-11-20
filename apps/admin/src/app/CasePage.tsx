@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Descriptions, Empty, Space, Spin, Table, Tag } from 'antd';
 import { AdminClient } from '../api/client';
-import type { ReconciliationCase, Scope } from '../api/contracts';
+import type { ReconciliationCase, Scope, AdminSession } from '../api/contracts';
+import { CaseWork } from './CaseWork';
 import { date, Failure } from './widgets';
 
 const api = new AdminClient();
 const labels = { open: '待核对', investigating: '调查中', waiting_external: '等待外部结果', resolved: '已解决' };
 
-export default function CasePage({scope, queryKey}: {scope: Scope; queryKey: string[]}) {
+export default function CasePage({scope, queryKey, session, invalidate}: {scope: Scope; queryKey: string[]; session: AdminSession; invalidate: () => void}) {
   const [pages, setPages] = useState<string[]>([]);
   const [id, setId] = useState<string>();
   const cursor = pages.at(-1);
@@ -27,10 +28,10 @@ export default function CasePage({scope, queryKey}: {scope: Scope; queryKey: str
     <Failure error={list.error}/>
     <Card>
       {list.isFetching ? <Spin/> : list.error ? null : list.data?.data.length ?
-        <Table<ReconciliationCase> rowKey="case_id" pagination={false} scroll={{x: 740}} dataSource={list.data.data} columns={[
+        <Table<ReconciliationCase> rowKey="case_id" pagination={false} scroll={{x: 740, y: 'min(46vh, 460px)'}} dataSource={list.data.data} columns={[
           {title:'事项标识',dataIndex:'case_id'}, {title:'所属账户',dataIndex:'owner_id'},
           {title:'状态',render:(_,row)=><Tag>{labels[row.state]}</Tag>},
-          {title:'下次核对时间',render:(_,row)=>date(row.next_check_at)},
+          {title:'下次核对时间',render:(_,row)=>row.state==='resolved'?'—':date(row.next_check_at)},
           {title:'详情',render:(_,row)=><Button onClick={()=>setId(row.case_id)}>查看事项</Button>}
         ]}/> : <Empty description="当前范围没有对账事项"/>}
       <Space>
@@ -43,8 +44,9 @@ export default function CasePage({scope, queryKey}: {scope: Scope; queryKey: str
       {detail.isFetching ? <Spin/> : item && <Descriptions column={1} items={[
         {key:'id',label:'事项标识',children:item.case_id}, {key:'owner',label:'所属账户',children:item.owner_id},
         {key:'reference',label:'业务引用',children:item.business_ref}, {key:'state',label:'当前状态',children:labels[item.state]},
-        {key:'next',label:'下次核对时间',children:date(item.next_check_at)}, {key:'version',label:'记录版本',children:item.version}
+        {key:'next',label:'下次核对时间',children:item.state==='resolved'?'已关闭':date(item.next_check_at)}, {key:'version',label:'记录版本',children:item.version}
       ]}/>}
+      {item && <CaseWork key={item.case_id} row={item} scope={scope} session={session} queryKey={queryKey} invalidate={invalidate} onRefresh={()=>{void detail.refetch();void list.refetch();}}/>}
     </Card>}
   </>;
 }

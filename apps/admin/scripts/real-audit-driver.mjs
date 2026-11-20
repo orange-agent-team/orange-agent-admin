@@ -1,4 +1,5 @@
 // Actual browser + explicitly selected API. The caller owns the fixture session.
+import { exerciseCaseEdits } from './real-case-edits.mjs';
 import { chromium } from '@playwright/test';
 import { readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
 import { dirname, resolve, relative, isAbsolute, extname } from 'node:path';
@@ -10,20 +11,23 @@ if (process.version !== 'v22.23.2') throw Error('Pinned Node22.23.2 required');
 const file = process.argv[2];
 if (!file || (statSync(file).mode & 0o077)) throw Error('Private fixture file required');
 const f = JSON.parse(readFileSync(file, 'utf8')), api = new URL(f.api), origin = new URL(f.origin);
-if (api.protocol !== 'http:' || api.hostname !== '127.0.0.1' || api.username || api.password || api.pathname !== '/' || api.search || api.hash || origin.origin !== 'https://127.0.0.1:43141') throw Error('Owned loopback endpoints required');
+if (api.protocol !== 'http:' || api.hostname !== '127.0.0.1' || api.username || api.password || api.pathname !== '/' || api.search || api.hash || origin.origin !== 'https://127.0.0.1:43112') throw Error('Owned loopback endpoints required');
 if (!f.cookie.startsWith('__Host-orange-admin=')) throw Error('Explicit administration session fixture required');
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..'), dist = realpathSync(resolve(app, 'dist'));
 const tls = resolve(app, '../../.local/tls'), evidence = dirname(file);
 let browser, page;
 const input = createInterface({ input: process.stdin });
 const revoked = new Promise(ok => { input.on('line', line => ok(line === 'revoked')); input.on('close', () => ok(false)); });
+const fixtureCookie = cookie => f.finance.some(a=>a.cookie===cookie);
 const server = createServer({ key: readFileSync(resolve(tls, 'key.pem')), cert: readFileSync(resolve(tls, 'cert.pem')) }, (req, res) => {
   try {
     const url = new URL(req.url, origin);
-    if (!req.url.startsWith('/') || url.origin !== origin.origin || req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+    const caseWrite = req.method === 'POST' && req.headers.origin === origin.origin &&
+      fixtureCookie(req.headers.cookie) && /^\/admin\/v1\/actions(?:\/[a-z0-9-]+\/(?:approvals|execute))?$/.test(url.pathname);
+    if (!req.url.startsWith('/') || url.origin !== origin.origin || (req.method !== 'GET' && !caseWrite)) { res.writeHead(405); res.end(); return; }
     if (url.pathname.startsWith('/admin/v1/')) {
-      const upstream = forward(new URL(req.url, api), { method: 'GET', headers: { ...req.headers, host: api.host } }, response => { res.writeHead(response.statusCode ?? 502, response.headers); response.pipe(res); });
-      upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); }); req.on('aborted', () => upstream.destroy()); upstream.end(); return;
+      const upstream = forward(new URL(req.url, api), { method: req.method, headers: { ...req.headers, host: api.host } }, response => { res.writeHead(response.statusCode ?? 502, response.headers); response.pipe(res); });
+      upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); }); req.on('aborted', () => upstream.destroy()); if(caseWrite)req.pipe(upstream);else upstream.end(); return;
     }
     let target = resolve(dist, '.' + decodeURIComponent(url.pathname));
     const check = relative(dist, target);
@@ -36,7 +40,7 @@ const server = createServer({ key: readFileSync(resolve(tls, 'key.pem')), cert: 
   } catch { res.writeHead(400); res.end(); }
 });
 try {
-  await new Promise((ok, bad) => { server.once('error', bad); server.listen(43141, '127.0.0.1', ok); });
+  await new Promise((ok, bad) => { server.once('error', bad); server.listen(43112, '127.0.0.1', ok); });
   browser = await chromium.launch({ channel: 'chrome', headless: true });
   const context = await browser.newContext({ baseURL: origin.origin, ignoreHTTPSErrors: true, viewport: { width: 1440, height: 1100 } });
   await context.addCookies([{ name: '__Host-orange-admin', value: f.cookie.slice('__Host-orange-admin='.length), url: origin.origin, secure: true, httpOnly: true, sameSite: 'Lax' }]);
@@ -81,6 +85,7 @@ try {
   const original = await page.request.get('/admin/v1/audit-events/legacy-a?environment=dev'); const event = await original.json();
   if (original.status() !== 200 || event.event_id !== 'legacy-a' || event.request_id !== null || event.result !== 'recorded' || event.scope.scope_id !== f.scope_a) throw Error('Legacy metadata differs from actual stored event');
   const denied = await page.request.get('/admin/v1/audit-events/foreign-b?environment=dev'); if (denied.status() !== 404) throw Error('Foreign detail metadata disclosed');
+  const caseEdits=await exerciseCaseEdits(browser,f,origin.origin,resolve(evidence,'case-edits-confirmed.png'));
   await page.screenshot({ path: resolve(evidence, 'actual-audit.png'), fullPage: true });
   process.stdout.write('AUDIT_READY_FOR_REVOCATION\n'); if (!await revoked) throw Error('Revocation control was not confirmed');
   await page.getByRole('button', { name: '刷新数据', exact: true }).click();
@@ -94,7 +99,7 @@ try {
   const stillAuthorized = await other.json();
   if (other.status() !== 200 || !stillAuthorized.permissions.includes('audit.read') || stillAuthorized.scope.scope_id !== f.scope_c) throw Error('Other scope audit grant did not remain active');
   if (writes || foreignReads) throw Error('Unexpected UI mutation or unauthorized scope read');
-  writeFileSync(resolve(evidence, 'browser-result.json'), JSON.stringify({ passed: true, actual_api: true, legacy_trace_null: true, scope_specific_permissions: true, pagination_and_detail: true, revoked_content_cleared: true, global_aggregate_unchanged_after_scope_revocation: true, no_ui_mutations: true, session_fixture: true, mfa_issuance_certified: false }) + '\n', { mode: 0o600 });
+  writeFileSync(resolve(evidence, 'browser-result.json'), JSON.stringify({ passed: true, actual_api: true, legacy_trace_null: true, scope_specific_permissions: true, pagination_and_detail: true, revoked_content_cleared: true, global_aggregate_unchanged_after_scope_revocation: true, audit_ui_mutations: writes, case_edits:caseEdits, case_write_ui: true, session_fixture: true, mfa_issuance_certified: false }) + '\n', { mode: 0o600 });
   console.log('PASS actual Chrome/API/PG audit scopes, pagination, original null trace and revocation clearing; explicit session fixture, no new MFA certification');
 } catch (error) {
   try { if (page) { writeFileSync(resolve(evidence, 'browser-error.json'), JSON.stringify({ error: String(error), main: await page.locator('main').innerText() }), { mode: 0o600 }); await page.screenshot({ path: resolve(evidence, 'audit-failed.png'), fullPage: true }); } } catch {}

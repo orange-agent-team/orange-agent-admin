@@ -41,7 +41,7 @@ export function ActionLookup({ scope, invalidate, onFound }: { scope: Scope; inv
   </section>;
 }
 
-function useIntent(session: AdminSession, invalidate: () => void, completed: (result: ActionRevision) => void, stale: () => void) {
+export function useIntent(session: AdminSession, invalidate: () => void, completed: (result: ActionRevision) => void, stale: () => void) {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [pending, setPending] = useState<Pending>();
@@ -155,7 +155,10 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   }
   const doc = revision?.action;
   const scope = action.request.scope;
-  const specific = permissions[action.request.action_type as NodeKind];
+  const caseEdit = action.request.action_type === 'case.update';
+  const closingCase = caseEdit && action.request.payload.change === 'close';
+  const specific = caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind];
+  const checkerPermission = closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -182,7 +185,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       {live && ['ready', 'pending_approval'].includes(doc.state) && <>
         <label>批准、拒绝或撤回原因<Input.TextArea aria-label="审核原因" value={reason} maxLength={1000} disabled={intent.disabled} onChange={e => setReason(e.target.value)} /></label>
         <Space wrap>
-          {doc.state === 'pending_approval' && doc.requested_by !== session.principal_id && allowed(session, 'actions.approve', scope) && allowed(session, 'nodes.resume.approve', scope) && <>
+          {doc.state === 'pending_approval' && doc.requested_by !== session.principal_id && allowed(session, 'actions.approve', scope) && allowed(session, checkerPermission, scope) && <>
             <Button disabled={intent.disabled || !reason.trim()} onClick={() => send('approve')}>独立批准</Button>
             <Button danger disabled={intent.disabled || !reason.trim()} onClick={() => send('reject')}>拒绝申请</Button>
           </>}
