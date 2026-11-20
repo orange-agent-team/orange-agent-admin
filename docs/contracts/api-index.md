@@ -86,3 +86,5 @@ OIDC登录/回调的完整协议、用户API和云Host等另按整体接口计�
 支持操作通过 GET /admin/v1/support-authorizations/{id} 核对用户授权。support_access.grant 需要客服申请、安全人员独立批准及执行。support_access.revoke 可由拥有相应租户权限的客服或安全管理员执行。授权记录通过 GET /admin/v1/support-grants 和 GET /admin/v1/support-grants/{id} 查询。正文按次通过 POST /admin/v1/support-content 核对。
 
 平台角色绑定通过 GET /admin/v1/principals/{principal}/role-bindings/{role} 核对。授予与撤销均以目标版本、当前作用域、申请人与独立批准人为依据。目标人员已有管理主体标识，不能充当本次授予或撤销的申请人、独立批准人或执行人。
+
+开发转写定价使用 `GET|POST /admin/v1/transcription-price-drafts` 和 `GET /admin/v1/transcription-price-drafts/{price_id}`。从已审核的节点观测创建草稿，按解码分钟收取开发微积分。审批页面显示观测、节点及执行配置；独立批准和执行沿用 `pricing.publish`。

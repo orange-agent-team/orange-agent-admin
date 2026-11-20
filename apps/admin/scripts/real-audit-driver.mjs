@@ -24,7 +24,7 @@ const server = createServer({ key: readFileSync(resolve(tls, 'key.pem')), cert: 
   try {
     const url = new URL(req.url, origin);
     const financeWrite = req.method === 'POST' && req.headers.origin === origin.origin &&
-      fixtureCookie(req.headers.cookie) && (url.pathname === '/admin/v1/price-drafts' || /^\/admin\/v1\/actions(?:\/[a-z0-9-]+\/(?:approvals|execute))?$/.test(url.pathname));
+      fixtureCookie(req.headers.cookie) && (['/admin/v1/price-drafts','/admin/v1/transcription-price-drafts'].includes(url.pathname) || /^\/admin\/v1\/actions(?:\/[a-z0-9-]+\/(?:approvals|execute))?$/.test(url.pathname));
     if (!req.url.startsWith('/') || url.origin !== origin.origin || (req.method !== 'GET' && !financeWrite)) { res.writeHead(405); res.end(); return; }
     if (url.pathname.startsWith('/admin/v1/')) {
       const upstream = forward(new URL(req.url, api), { method: req.method, headers: { ...req.headers, host: api.host } }, response => { res.writeHead(response.statusCode ?? 502, response.headers); response.pipe(res); });

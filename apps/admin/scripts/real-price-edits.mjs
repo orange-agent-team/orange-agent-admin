@@ -7,11 +7,14 @@ export async function exercisePrices(maker, checker, terms, screenshot) {
   for (const page of [maker,checker]) page.on('request',countPost);
   try {
     await maker.goto('/price-drafts');
-    for (const [label,value] of [
+    const audio=Object.hasOwn(terms,'observation_id');
+    if(audio)await maker.getByRole('button',{name:'转写定价',exact:true}).click();
+    const fields=audio?[['转写节点观测编号',terms.observation_id],['每分钟转写价格（微积分）',terms.price_per_minute],['平台费率（基点）',terms.fee_bps]]:[
       ['节点标识',terms.node_id], ['已审核执行配置',terms.execution_profile_id],
       ['可信计量配置摘要',terms.meter_profile_digest], ['每千输入单位价格（微积分）',terms.input_price],
       ['每千输出单位价格（微积分）',terms.output_price], ['输出单位上限',terms.output_limit], ['平台费率（基点）',terms.fee_bps],
-    ]) await maker.getByLabel(label,{exact:true}).fill(String(value));
+    ];
+    for(const [label,value] of fields) await maker.getByLabel(label,{exact:true}).fill(String(value));
     async function submit(page, button, endpoint, status) {
       const waiting=page.waitForResponse(response=>new URL(response.url()).pathname===endpoint && response.request().method()==='POST');
       await page.getByRole('button',{name:button,exact:true}).click();
@@ -19,7 +22,7 @@ export async function exercisePrices(maker, checker, terms, screenshot) {
       if(response.status()!==status) throw new Error(button+' received HTTP '+response.status());
       return response.json();
     }
-    const row=await submit(maker,'保存定价草稿','/admin/v1/price-drafts',201);
+    const row=await submit(maker,audio?'保存转写定价草稿':'保存定价草稿',audio?'/admin/v1/transcription-price-drafts':'/admin/v1/price-drafts',201);
     if(row.state!=='draft') throw Error('New draft is already published');
     await maker.getByLabel('生效时间（UTC 整秒）').fill(row.created_at);
     await maker.getByLabel('关联工单',{exact:true}).fill('browser-price-review');
@@ -34,7 +37,8 @@ export async function exercisePrices(maker, checker, terms, screenshot) {
     await checker.getByRole('button',{name:'读取最新审批预览'}).click();
     const preview=checker.getByRole('region',{name:'核对与审批'});
     await preview.getByText('本次审核费率与计量配置').waitFor();
-    if(!(await preview.innerText()).includes(terms.meter_profile_digest))throw Error('Missing meter in independent review');
+    const reviewed=await preview.innerText();
+    if(audio ? ![terms.observation_id,terms.price_per_minute,row.node_id,row.execution_profile_id].every(v=>reviewed.includes(v)) : !reviewed.includes(terms.meter_profile_digest))throw Error('Missing pricing identity in independent review');
     await checker.getByRole('textbox',{name:'审核原因'}).fill('已独立核对开发积分费率与计量配置');
     await submit(checker,'独立批准','/admin/v1/actions/'+action.action_id+'/approvals',200);
     await maker.getByRole('button',{name:'读取最新审批预览'}).click();

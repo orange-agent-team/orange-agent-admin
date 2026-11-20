@@ -53,6 +53,10 @@ export interface TextPriceDraft {
   target_version: string; review_report_id: string; created_by: string; created_at: string;
   state: 'draft' | 'scheduled' | 'active' | 'blocked'; effective_at?: string; publication_action_id?: string;
 }
+export interface TranscriptionPriceDraftTerms { scope:Scope; observation_id:string; price_per_minute:string; fee_bps:number }
+export interface TranscriptionPriceDraft extends Omit<TextPriceDraft,'terms'> {terms:TranscriptionPriceDraftTerms; node_id:string; execution_profile_id:string}
+export type PriceDraft=TextPriceDraft|TranscriptionPriceDraft;
+interface TranscriptionPriceDraftList {data:TranscriptionPriceDraft[];next_cursor?:string}
 interface TextPriceDraftList { data: TextPriceDraft[]; next_cursor?: string }
 export interface CaseChange {action_id:string;actor_id:string;version:string;occurred_at:string;payload:CaseEdit}
 export interface CaseActivity {case_id:string;owner_id:string;version:string;data:CaseChange[];assigned_to?:string;resolution_ref?:string;next_cursor?:string}
@@ -68,6 +72,9 @@ const validators = {
   SupportGrantList: ajv.compile<GrantPage>({ $ref: `${schema.$id}#/$defs/SupportGrantList` }),
   SupportGrantDetail: ajv.compile<GrantDetail>({ $ref: `${schema.$id}#/$defs/SupportGrantDetail` }),
   SupportConsentReview: ajv.compile<ConsentReview>({ $ref: `${schema.$id}#/$defs/SupportConsentReview` }),
+  TranscriptionPriceDraftList: ajv.compile<TranscriptionPriceDraftList>({ $ref: `${schema.$id}#/$defs/TranscriptionPriceDraftList` }),
+  TranscriptionPriceDraft: ajv.compile<TranscriptionPriceDraft>({ $ref: `${schema.$id}#/$defs/TranscriptionPriceDraft` }),
+  TranscriptionPriceDraftTerms: ajv.compile<TranscriptionPriceDraftTerms>({ $ref: `${schema.$id}#/$defs/TranscriptionPriceDraftTerms` }),
   TextPriceDraftList: ajv.compile<TextPriceDraftList>({ $ref: `${schema.$id}#/$defs/TextPriceDraftList` }),
   TextPriceDraft: ajv.compile<TextPriceDraft>({ $ref: `${schema.$id}#/$defs/TextPriceDraft` }),
   TextPriceDraftTerms: ajv.compile<TextPriceDraftTerms>({ $ref: `${schema.$id}#/$defs/TextPriceDraftTerms` }),
@@ -86,7 +93,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Descriptions, Form, Input, InputNumber, Space, Table } from 'antd';
 import { AdminClient } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type Scope, type TextPriceDraft, type TextPriceDraftTerms } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type Scope, type PriceDraft,type TranscriptionPriceDraft,type TranscriptionPriceDraftTerms,type TextPriceDraft, type TextPriceDraftTerms } from '../api/contracts';
 import { ActionReview, useIntent } from './ActionControls';
 import { date, Failure, Heading } from './widgets';
 
@@ -38,7 +38,20 @@ function DraftForm({ scope, session, invalidate, onSaved }: EditorProps & { onSa
   </Card>;
 }
 
-function ReviewedPrice({ row, scope, session, invalidate, refresh }: EditorProps & {row: TextPriceDraft; refresh: () => void}) {
+function AudioDraftForm({scope,session,invalidate,onSaved}:EditorProps & {onSaved:(row:TranscriptionPriceDraft)=>void}){
+  const [form]=Form.useForm<Omit<TranscriptionPriceDraftTerms,'scope'>>();
+  const intent=useIntent<TranscriptionPriceDraft>(session,invalidate,row=>{form.resetFields();onSaved(row);},()=>{});
+  return <Card title="创建转写定价草稿">
+    <Form form={form} layout="vertical" disabled={intent.disabled} onFinish={v=>intent.start(key=>api.createTranscriptionPriceDraft({...v,scope},session,key))}>
+      <Form.Item name="observation_id" label="转写节点观测编号" rules={[{required:true,pattern:id}]}><Input/></Form.Item>
+      <Form.Item name="price_per_minute" label="每分钟转写价格（微积分）" rules={[{required:true,pattern:/^[1-9][0-9]{0,18}$/}]}><Input/></Form.Item>
+      <Form.Item name="fee_bps" label="平台费率（基点）" rules={[{required:true,type:'integer',min:0,max:10000}]}><InputNumber min={0} max={10000}/></Form.Item>
+      <Button htmlType="submit" type="primary" loading={intent.busy}>保存转写定价草稿</Button>
+    </Form>{intent.notice}
+  </Card>;
+}
+
+function ReviewedPrice({ row, scope, session, invalidate, refresh }: EditorProps & {row: PriceDraft; refresh: () => void}) {
   const [ticket, setTicket] = useState('');
   const [reason, setReason] = useState('');
   const [effective, setEffective] = useState('');
@@ -50,7 +63,7 @@ function ReviewedPrice({ row, scope, session, invalidate, refresh }: EditorProps
   return <Card title="价格版本详情"><Descriptions column={1} items={[
     {key:'price',label:'价格版本',children:row.price_version_id},
     {key:'state',label:'发布状态',children:states[row.state]},
-    {key:'node',label:'提供方与节点',children:row.provider_owner_id+' / '+row.terms.node_id},
+    {key:'node',label:'提供方与节点',children:row.provider_owner_id+' / '+('node_id' in row ? row.node_id : row.terms.node_id)},
     {key:'terms',label:'审核条款',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(row.terms,null,2)}</pre>},
     {key:'digest',label:'条款摘要',children:row.target_version},
     {key:'report',label:'审核记录摘要',children:row.review_report_id},
@@ -74,19 +87,28 @@ function ReviewedPrice({ row, scope, session, invalidate, refresh }: EditorProps
 }
 
 export default function PricesPage(props: Props) {
-  const {scope,session,queryKey}=props;
+  const [audio,setAudio]=useState(false);
+  return <><Space aria-label="计价类型"><Button aria-pressed={!audio} onClick={()=>setAudio(false)}>文本定价</Button><Button aria-pressed={audio} onClick={()=>setAudio(true)}>转写定价</Button></Space>
+    <PriceCatalog key={String(audio)} {...props} audio={audio}/></>;
+}
+
+function PriceCatalog(props:Props & {audio:boolean}){
+  const {scope,session,queryKey,audio}=props;
   const [selected,setSelected]=useState<string>();
   const [pages,setPages]=useState<string[]>([]);
   const cursor=pages.at(-1);
-  const list=useQuery({queryKey:[...queryKey,'price-drafts',cursor??'first'],queryFn:({signal})=>api.priceDrafts(scope,cursor,signal)});
+  const list=useQuery({queryKey:[...queryKey,'price-drafts',audio,cursor??'first'],queryFn:({signal})=>api.priceDrafts(scope,cursor,signal,audio)});
   const detail=useQuery({queryKey:[...queryKey,'price-draft',selected],enabled:!!selected,queryFn:({signal})=>api.priceDraft(scope,selected!,signal)});
   function refresh(){void list.refetch();if(selected)void detail.refetch();}
+  const FormComponent=audio?AudioDraftForm:DraftForm;
   return <><Heading title="开发算力定价" eyebrow="PRICING" description="费率使用微积分，每 1,000,000 微积分等于 1 积分。发布需要独立批准。" refresh={refresh}/>
-    {allowed(session,'pricing.draft',scope) && <DraftForm {...props} onSaved={row=>{setPages([]);setSelected(row.price_version_id);void list.refetch();}}/>}
-    <Failure error={list.error}/><Table<TextPriceDraft> rowKey="price_version_id" loading={list.isFetching} pagination={false}
+    {allowed(session,'pricing.draft',scope) && <FormComponent {...props} onSaved={row=>{setPages([]);setSelected(row.price_version_id);void list.refetch();}}/>}
+    <Failure error={list.error}/><Table<PriceDraft> rowKey="price_version_id" loading={list.isFetching} pagination={false}
       dataSource={list.error?[]:list.data?.data??[]} columns={[
         {title:'价格版本',render:(_,row)=><Button type="link" onClick={()=>setSelected(row.price_version_id)}>{row.price_version_id}</Button>},
-        {title:'每千输入单位价格（微积分）',render:(_,row)=>row.terms.input_price},{title:'每千输出单位价格（微积分）',render:(_,row)=>row.terms.output_price},
+        ...(audio?[{title:'每分钟转写价格（微积分）',render:(_:unknown,row:PriceDraft)=>'price_per_minute' in row.terms?row.terms.price_per_minute:null}]:
+        [{title:'每千输入单位价格（微积分）',render:(_:unknown,row:PriceDraft)=>'input_price' in row.terms?row.terms.input_price:null},
+        {title:'每千输出单位价格（微积分）',render:(_:unknown,row:PriceDraft)=>'output_price' in row.terms?row.terms.output_price:null}]),
         {title:'状态',render:(_,row)=>states[row.state]},
       ]}/>
     <Space><Button disabled={!pages.length||list.isFetching} onClick={()=>setPages(v=>v.slice(0,-1))}>上一页</Button>

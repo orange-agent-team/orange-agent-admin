@@ -1,11 +1,8 @@
 # 管理端契约消费说明
 
-快照日期：2026-11-04；OpenAPI 0.1.2。权威源由服务端 E02 维护；Admin 消费提交在自己仓库中的固定字节，不在构建时读取相邻仓库。
+本仓库固定消费服务端 Admin OpenAPI 0.1.12。快照清单列出生产仓库的 Git 提交、每份契约的源路径及 SHA-256。构建会核验本仓库中的契约副本。[快照清单](snapshot.json)
 
-| 产物 | 源路径 | SHA-256 |
-|---|---|---|
-| admin.openapi.json | orange-agent-server/contracts/openapi/admin.v1.json | 91270c27fb1024c0bb1da57092139662e5269f0d3a4b49c879d02686febed49f |
-| admin.schema.json | orange-agent-server/contracts/json-schema/admin.schema.json | 682b375067158d1071252a51c06e40a7ae39c28a0bc3efb794e781a583871714 |
+文本价格与转写价格使用各自的草稿查询入口。转写按音频解码时长计算开发微积分；审批人可核对节点、执行配置、观测编号和费率。两类价格共用独立批准、执行、定时生效和范围内审计的流程。
 
 本目录的 OpenAPI 和 JSON Schema 是服务端只读快照。E11只能消费和提出变更，不独立修改副本的金额、权限或动作状态。[机器摘要清单](snapshot.json)由独立构建检查校验。
 

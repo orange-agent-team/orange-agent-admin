@@ -60,7 +60,8 @@ export async function exerciseCaseEdits(browser, fixture, origin, screenshot, pr
     await maker.screenshot({path:screenshot,fullPage:true});
     const casePosts=posts;
     const pricing=await exercisePrices(maker,checker,fixture.price_terms,priceScreenshot);
-    return {action_posts:casePosts,pricing,case_id:'browser-case-050',closed:true};
+    const audio_pricing=await exercisePrices(maker,checker,fixture.audio_price_terms,priceScreenshot.replace(/\.png$/,'-asr.png'));
+    return {action_posts:casePosts,pricing,audio_pricing,case_id:'browser-case-050',closed:true};
   } finally {
     await Promise.all(contexts.map(c=>c.close()));
   }

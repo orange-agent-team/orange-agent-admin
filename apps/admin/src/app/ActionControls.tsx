@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type TextPriceDraft, type ConsentReview, type GrantDetail, type RoleBinding } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type PriceDraft, type ConsentReview, type GrantDetail, type RoleBinding } from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
@@ -143,7 +143,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const [revision, setRevision] = useState<ActionRevision>();
   const [binding,setBinding] = useState<RoleBinding>();
   const [support, setSupport] = useState<ConsentReview | GrantDetail>();
-  const [price, setPrice] = useState<TextPriceDraft>();
+  const [price, setPrice] = useState<PriceDraft>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [reason, setReason] = useState('');
@@ -211,7 +211,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
       ...(binding ? [{key:'binding',label:'当前平台角色绑定',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(binding,null,2)}</pre>}] : []),
       ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
-      ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>输入和输出费率均为每千计量单位的微积分。1 积分等于 1,000,000 微积分，两部分费用分别向上取整。</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
+      ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>{'observation_id' in price.terms ? '按源音频解码毫秒数计量，每分钟费率以微积分表示，整单向上取整。' : '输入和输出费率均为每千计量单位的微积分。1 积分等于 1,000,000 微积分，两部分费用分别向上取整。'}</p>{'node_id' in price && <p>节点 {price.node_id} · 配置 {price.execution_profile_id}</p>}<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
       { key: 'digest', label: '服务端内容摘要', children: <Typography.Text copyable>{doc.payload_digest}</Typography.Text> },
       { key: 'policy', label: '审批政策版本', children: doc.policy_version },
       { key: 'expires', label: '到期时间', children: date(doc.expires_at) },

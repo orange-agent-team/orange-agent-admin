@@ -1,4 +1,4 @@
-import { decode, scopeKey, type AdminAction, type AdminSession, type Scope, type TextPriceDraftTerms } from './contracts';
+import { decode, scopeKey, type AdminAction, type AdminSession, type Scope, type TranscriptionPriceDraftTerms, type TextPriceDraftTerms } from './contracts';
 
 export interface ActionRevision { action: AdminAction; etag: string }
 export type ActionOperation = 'approve' | 'reject' | 'execute' | 'cancel';
@@ -93,14 +93,15 @@ export class AdminClient {
     if(row.grant_id!==grant||row.resource_id!==resource||row.content_field!=='file_content'||new TextEncoder().encode(row.content).length>limit)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
     return row;
   }
-  async priceDrafts(scope: Scope, cursor?: string, signal?: AbortSignal) {
-    const rows = decode('TextPriceDraftList', await this.read(`/admin/v1/price-drafts?${this.query(scope, cursor)}`, signal));
+  async priceDrafts(scope: Scope, cursor?: string, signal?: AbortSignal, audio=false) {
+    const rows = decode(audio?'TranscriptionPriceDraftList':'TextPriceDraftList', await this.read(`/admin/v1/${audio?'transcription-price-drafts':'price-drafts'}?${this.query(scope, cursor)}`, signal));
     if (rows.data.some(row => scopeKey(row.terms.scope) !== scopeKey(scope))) throw new ApiFailure(403, 'SCOPE_MISMATCH');
     return rows;
   }
   async priceDraft(scope: Scope, id: string, signal?: AbortSignal) {
     assertId(id);
-    const row = decode('TextPriceDraft', await this.read(`/admin/v1/price-drafts/${encodeURIComponent(id)}?${this.query(scope)}`, signal));
+    const audio=id.startsWith('asr-price-');
+    const row = decode(audio?'TranscriptionPriceDraft':'TextPriceDraft', await this.read(`/admin/v1/${audio?'transcription-price-drafts':'price-drafts'}/${encodeURIComponent(id)}?${this.query(scope)}`, signal));
     if (row.price_version_id !== id || scopeKey(row.terms.scope) !== scopeKey(scope)) throw new ApiFailure(403, 'TARGET_MISMATCH');
     return row;
   }
@@ -114,6 +115,16 @@ export class AdminClient {
       if (stable(row.terms) !== stable(terms) || row.created_by !== session.principal_id) throw new Error('MISMATCH');
       return row;
     } catch { throw new ApiFailure(0, 'OUTCOME_UNCONFIRMED'); }
+  }
+  async createTranscriptionPriceDraft(terms:TranscriptionPriceDraftTerms,session:AdminSession,key:string){
+    decode('TranscriptionPriceDraftTerms',terms);
+    const {raw}=await this.jsonRequest('/admin/v1/transcription-price-drafts',{method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':session.csrf_token,'Idempotency-Key':key},body:JSON.stringify(terms)});
+    try{
+      const row=decode('TranscriptionPriceDraft',raw);
+      if(!row.price_version_id.startsWith('asr-price-')||stable(row.terms)!==stable(terms)||row.created_by!==session.principal_id)throw new Error('MISMATCH');
+      return row;
+    }catch{throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');}
   }
   async cases(scope: Scope, cursor?: string, signal?: AbortSignal) {
     if (!['platform', 'tenant'].includes(scope.kind)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
