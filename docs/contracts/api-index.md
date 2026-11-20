@@ -88,3 +88,5 @@ OIDC登录/回调的完整协议、用户API和云Host等另按整体接口计�
 平台角色绑定通过 GET /admin/v1/principals/{principal}/role-bindings/{role} 核对。授予与撤销均以目标版本、当前作用域、申请人与独立批准人为依据。目标人员已有管理主体标识，不能充当本次授予或撤销的申请人、独立批准人或执行人。
 
 开发转写定价使用 `GET|POST /admin/v1/transcription-price-drafts` 和 `GET /admin/v1/transcription-price-drafts/{price_id}`。从已审核的节点观测创建草稿，按解码分钟收取开发微积分。审批页面显示观测、节点及执行配置；独立批准和执行沿用 `pricing.publish`。
+
+测试退款通过 `GET /admin/v1/test-refunds/{case_id}` 核对原单、现金金额及已冻结积分。动作 `payment.refund` 要求独立批准，产生的业务引用为原退款编号，实际现金状态由付款服务回查。

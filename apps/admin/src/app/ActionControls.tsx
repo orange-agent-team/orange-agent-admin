@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type PriceDraft, type ConsentReview, type GrantDetail, type RoleBinding } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type PriceDraft,type TestRefundReview, type ConsentReview, type GrantDetail, type RoleBinding } from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
@@ -143,6 +143,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const [revision, setRevision] = useState<ActionRevision>();
   const [binding,setBinding] = useState<RoleBinding>();
   const [support, setSupport] = useState<ConsentReview | GrantDetail>();
+  const [refund,setRefund]=useState<TestRefundReview>();
   const [price, setPrice] = useState<PriceDraft>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -151,7 +152,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined); setSupport(undefined);setBinding(undefined);
+    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined);setRefund(undefined); setSupport(undefined);setBinding(undefined);
     try {
       const result = await api.action(action.action_id, action.request.scope);
       const request = result.action.request;
@@ -173,6 +174,12 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
         if(row.ticket_id!==request.ticket_id)throw Error('SUPPORT_GRANT_MISMATCH');
         if(active.current)setSupport(row);
       }
+      if(request.action_type==='payment.refund'){
+        const r=await api.testRefund(request.scope,String(request.payload.reconciliation_case_id));
+        const amount=request.payload.amount as {currency?:string;minor_units?:string}|undefined;
+        if(r.target_version!==request.target_version||r.payment_order_id!==request.payload.payment_order_id||r.amount.currency!==amount?.currency||r.amount.minor_units!==amount?.minor_units)throw Error('REFUND_REVIEW_MISMATCH');
+        if(active.current)setRefund(r);
+      }
       if (request.action_type === 'pricing.publish') {
         const terms = await api.priceDraft(request.scope, String(request.payload.price_version_id));
         if (terms.target_version !== request.target_version || terms.review_report_id !== request.payload.review_report_id ||
@@ -188,12 +195,13 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const scope = action.request.scope;
   const caseEdit = action.request.action_type === 'case.update';
   const closingCase = caseEdit && action.request.payload.change === 'close';
+  const paymentRefund=action.request.action_type==='payment.refund';
   const pricing = action.request.action_type === 'pricing.publish';
   const supportPermission = action.request.action_type==='support_access.grant'?'support.grant':action.request.action_type==='support_access.revoke'?'support.revoke':undefined;
   const rolePermission = action.request.action_type==='admin.role_grant'?'admins.grant':action.request.action_type==='admin.role_revoke'?'admins.revoke':undefined;
   const isTarget=!!rolePermission && action.request.payload.principal_id===session.principal_id;
-  const specific = rolePermission ?? supportPermission ?? (pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
-  const checkerPermission = rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const specific = rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
+  const checkerPermission = rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -211,6 +219,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
       ...(binding ? [{key:'binding',label:'当前平台角色绑定',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(binding,null,2)}</pre>}] : []),
       ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
+      ...(refund?[{key:'refund',label:'原购买与冻结积分',children:<><p>原支付订单 {refund.payment_order_id}</p><p>测试退款 {refund.amount.minor_units} {refund.amount.currency} 最小货币单位，已冻结 {refund.held_microcredits} 微积分。</p><p>退款编号 {refund.refund_id}</p></>}]:[]),
       ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>{'observation_id' in price.terms ? '按源音频解码毫秒数计量，每分钟费率以微积分表示，整单向上取整。' : '输入和输出费率均为每千计量单位的微积分。1 积分等于 1,000,000 微积分，两部分费用分别向上取整。'}</p>{'node_id' in price && <p>节点 {price.node_id} · 配置 {price.execution_profile_id}</p>}<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
       { key: 'digest', label: '服务端内容摘要', children: <Typography.Text copyable>{doc.payload_digest}</Typography.Text> },
       { key: 'policy', label: '审批政策版本', children: doc.policy_version },

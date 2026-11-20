@@ -93,6 +93,12 @@ export class AdminClient {
     if(row.grant_id!==grant||row.resource_id!==resource||row.content_field!=='file_content'||new TextEncoder().encode(row.content).length>limit)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
     return row;
   }
+  async testRefund(scope:Scope,id:string,signal?:AbortSignal){
+    assertId(id);
+    const row=decode('TestRefundReview',await this.read('/admin/v1/test-refunds/'+encodeURIComponent(id)+'?'+this.query(scope),signal));
+    if(row.reconciliation_case_id!==id||scope.environment!=='dev'||scope.kind==='tenant'&&row.owner_id!==scope.scope_id)throw new ApiFailure(403,'TARGET_MISMATCH');
+    return row;
+  }
   async priceDrafts(scope: Scope, cursor?: string, signal?: AbortSignal, audio=false) {
     const rows = decode(audio?'TranscriptionPriceDraftList':'TextPriceDraftList', await this.read(`/admin/v1/${audio?'transcription-price-drafts':'price-drafts'}?${this.query(scope, cursor)}`, signal));
     if (rows.data.some(row => scopeKey(row.terms.scope) !== scopeKey(scope))) throw new ApiFailure(403, 'SCOPE_MISMATCH');

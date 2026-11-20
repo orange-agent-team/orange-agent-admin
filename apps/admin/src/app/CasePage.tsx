@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Descriptions, Empty, Space, Spin, Table, Tag } from 'antd';
 import { AdminClient } from '../api/client';
 import type { ReconciliationCase, Scope, AdminSession } from '../api/contracts';
+import RefundCase from './RefundCase';
+import { allowed } from '../api/contracts';
 import { CaseWork } from './CaseWork';
 import { date, Failure } from './widgets';
 
@@ -46,7 +48,8 @@ export default function CasePage({scope, queryKey, session, invalidate}: {scope:
         {key:'reference',label:'业务引用',children:item.business_ref}, {key:'state',label:'当前状态',children:labels[item.state]},
         {key:'next',label:'下次核对时间',children:item.state==='resolved'?'已关闭':date(item.next_check_at)}, {key:'version',label:'记录版本',children:item.version}
       ]}/>}
-      {item && <CaseWork key={item.case_id} row={item} scope={scope} session={session} queryKey={queryKey} invalidate={invalidate} onRefresh={()=>{void detail.refetch();void list.refetch();}}/>}
+      {item?.business_ref.startsWith('test-refund:') && allowed(session,'refunds.read',scope) && <RefundCase key={item.case_id} item={item} scope={scope} session={session} invalidate={invalidate}/>}
+    {item && <CaseWork key={item.case_id} row={item} scope={scope} session={session} queryKey={queryKey} invalidate={invalidate} onRefresh={()=>{void detail.refetch();void list.refetch();}}/>}
     </Card>}
   </>;
 }
