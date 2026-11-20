@@ -22,12 +22,12 @@ const fixtureCookie = cookie => f.finance.some(a=>a.cookie===cookie);
 const server = createServer({ key: readFileSync(resolve(tls, 'key.pem')), cert: readFileSync(resolve(tls, 'cert.pem')) }, (req, res) => {
   try {
     const url = new URL(req.url, origin);
-    const caseWrite = req.method === 'POST' && req.headers.origin === origin.origin &&
-      fixtureCookie(req.headers.cookie) && /^\/admin\/v1\/actions(?:\/[a-z0-9-]+\/(?:approvals|execute))?$/.test(url.pathname);
-    if (!req.url.startsWith('/') || url.origin !== origin.origin || (req.method !== 'GET' && !caseWrite)) { res.writeHead(405); res.end(); return; }
+    const financeWrite = req.method === 'POST' && req.headers.origin === origin.origin &&
+      fixtureCookie(req.headers.cookie) && (url.pathname === '/admin/v1/price-drafts' || /^\/admin\/v1\/actions(?:\/[a-z0-9-]+\/(?:approvals|execute))?$/.test(url.pathname));
+    if (!req.url.startsWith('/') || url.origin !== origin.origin || (req.method !== 'GET' && !financeWrite)) { res.writeHead(405); res.end(); return; }
     if (url.pathname.startsWith('/admin/v1/')) {
       const upstream = forward(new URL(req.url, api), { method: req.method, headers: { ...req.headers, host: api.host } }, response => { res.writeHead(response.statusCode ?? 502, response.headers); response.pipe(res); });
-      upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); }); req.on('aborted', () => upstream.destroy()); if(caseWrite)req.pipe(upstream);else upstream.end(); return;
+      upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); }); req.on('aborted', () => upstream.destroy()); if(financeWrite)req.pipe(upstream);else upstream.end(); return;
     }
     let target = resolve(dist, '.' + decodeURIComponent(url.pathname));
     const check = relative(dist, target);
@@ -85,7 +85,7 @@ try {
   const original = await page.request.get('/admin/v1/audit-events/legacy-a?environment=dev'); const event = await original.json();
   if (original.status() !== 200 || event.event_id !== 'legacy-a' || event.request_id !== null || event.result !== 'recorded' || event.scope.scope_id !== f.scope_a) throw Error('Legacy metadata differs from actual stored event');
   const denied = await page.request.get('/admin/v1/audit-events/foreign-b?environment=dev'); if (denied.status() !== 404) throw Error('Foreign detail metadata disclosed');
-  const caseEdits=await exerciseCaseEdits(browser,f,origin.origin,resolve(evidence,'case-edits-confirmed.png'));
+  const caseEdits=await exerciseCaseEdits(browser,f,origin.origin,resolve(evidence,'case-edits-confirmed.png'),resolve(evidence,'price-confirmed.png'));
   await page.screenshot({ path: resolve(evidence, 'actual-audit.png'), fullPage: true });
   process.stdout.write('AUDIT_READY_FOR_REVOCATION\n'); if (!await revoked) throw Error('Revocation control was not confirmed');
   await page.getByRole('button', { name: '刷新数据', exact: true }).click();
@@ -99,7 +99,7 @@ try {
   const stillAuthorized = await other.json();
   if (other.status() !== 200 || !stillAuthorized.permissions.includes('audit.read') || stillAuthorized.scope.scope_id !== f.scope_c) throw Error('Other scope audit grant did not remain active');
   if (writes || foreignReads) throw Error('Unexpected UI mutation or unauthorized scope read');
-  writeFileSync(resolve(evidence, 'browser-result.json'), JSON.stringify({ passed: true, actual_api: true, legacy_trace_null: true, scope_specific_permissions: true, pagination_and_detail: true, revoked_content_cleared: true, global_aggregate_unchanged_after_scope_revocation: true, audit_ui_mutations: writes, case_edits:caseEdits, case_write_ui: true, session_fixture: true, mfa_issuance_certified: false }) + '\n', { mode: 0o600 });
+  writeFileSync(resolve(evidence, 'browser-result.json'), JSON.stringify({ passed: true, actual_api: true, legacy_trace_null: true, scope_specific_permissions: true, pagination_and_detail: true, revoked_content_cleared: true, global_aggregate_unchanged_after_scope_revocation: true, audit_ui_mutations: writes, case_edits:caseEdits, pricing:caseEdits.pricing, case_write_ui: true, session_fixture: true, mfa_issuance_certified: false }) + '\n', { mode: 0o600 });
   console.log('PASS actual Chrome/API/PG audit scopes, pagination, original null trace and revocation clearing; explicit session fixture, no new MFA certification');
 } catch (error) {
   try { if (page) { writeFileSync(resolve(evidence, 'browser-error.json'), JSON.stringify({ error: String(error), main: await page.locator('main').innerText() }), { mode: 0o600 }); await page.screenshot({ path: resolve(evidence, 'audit-failed.png'), fullPage: true }); } } catch {}

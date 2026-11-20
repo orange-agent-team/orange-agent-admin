@@ -8,6 +8,7 @@ import { date, envNames, Failure, Heading } from './widgets';
 const api = new AdminClient();
 const ActionsPage = lazy(() => import('./ActionsPage'));
 const CasePage = lazy(() => import('./CasePage'));
+const PricesPage = lazy(() => import('./PricesPage'));
 const AuditPage = lazy(() => import('./AuditPage'));
 
 export default function AuthorizedApp({ session, invalidate, logout }: { session: AdminSession; invalidate: () => void; logout: () => void }) {
@@ -24,8 +25,8 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
   const scopedSession: AdminSession = { ...session, scopes: [scope], permissions: scopeAuthority.data?.permissions ?? [] };
   const permitted = (permission: string) => !scopeAuthority.isFetching && !scopeAuthority.error && !!scopeAuthority.data && allowed(scopedSession, permission, scope);
 
-  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/reconciliation-cases', permission: 'cases.read', label: '对账事项', icon: '≡' }, { path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
-    .filter(item => permitted(item.permission) && (!['/overview','/reconciliation-cases'].includes(item.path) || ['platform', 'tenant'].includes(scope.kind)));
+  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/reconciliation-cases', permission: 'cases.read', label: '对账事项', icon: '≡' }, { path: '/price-drafts', permission: 'pricing.read', label: '开发算力定价', icon: '¤' }, { path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
+    .filter(item => permitted(item.permission) && (item.path !== '/price-drafts' || (scope.environment === 'dev' && ['platform','tenant'].includes(scope.kind))) && (!['/overview','/reconciliation-cases'].includes(item.path) || ['platform', 'tenant'].includes(scope.kind)));
 
   return <QueryClientProvider client={client}>
     <div className="shell">
@@ -40,6 +41,7 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
           <Route path="/overview" element={permitted('overview.read') && ['platform', 'tenant'].includes(scope.kind) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="此范围不提供聚合总览" />} />
           <Route path="/actions" element={permitted('actions.read') ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
           <Route path="/reconciliation-cases" element={permitted('cases.read') && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin />}><CasePage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的对账查看权限" />} />
+          <Route path="/price-drafts" element={permitted('pricing.read') && scope.environment==='dev' && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin/>}><PricesPage scope={scope} session={scopedSession} queryKey={key} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的定价查看权限"/>}/>
           <Route path="/audit-events" element={permitted('audit.read') ? <Suspense fallback={<Spin />}><AuditPage scope={scope} queryKey={key} /></Suspense> : <Empty description="没有审计记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />
         </Routes>}</main>

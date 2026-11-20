@@ -1,4 +1,4 @@
-import { decode, scopeKey, type AdminAction, type AdminSession, type Scope } from './contracts';
+import { decode, scopeKey, type AdminAction, type AdminSession, type Scope, type TextPriceDraftTerms } from './contracts';
 
 export interface ActionRevision { action: AdminAction; etag: string }
 export type ActionOperation = 'approve' | 'reject' | 'execute' | 'cancel';
@@ -63,6 +63,28 @@ export class AdminClient {
       throw new ApiFailure(403, 'SCOPE_MISMATCH');
     return result;
   }
+  async priceDrafts(scope: Scope, cursor?: string, signal?: AbortSignal) {
+    const rows = decode('TextPriceDraftList', await this.read(`/admin/v1/price-drafts?${this.query(scope, cursor)}`, signal));
+    if (rows.data.some(row => scopeKey(row.terms.scope) !== scopeKey(scope))) throw new ApiFailure(403, 'SCOPE_MISMATCH');
+    return rows;
+  }
+  async priceDraft(scope: Scope, id: string, signal?: AbortSignal) {
+    assertId(id);
+    const row = decode('TextPriceDraft', await this.read(`/admin/v1/price-drafts/${encodeURIComponent(id)}?${this.query(scope)}`, signal));
+    if (row.price_version_id !== id || scopeKey(row.terms.scope) !== scopeKey(scope)) throw new ApiFailure(403, 'TARGET_MISMATCH');
+    return row;
+  }
+  async createPriceDraft(terms: TextPriceDraftTerms, session: AdminSession, key: string) {
+    decode('TextPriceDraftTerms', terms);
+    const { raw } = await this.jsonRequest('/admin/v1/price-drafts', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': key },
+      body: JSON.stringify(terms) });
+    try {
+      const row = decode('TextPriceDraft', raw);
+      if (stable(row.terms) !== stable(terms) || row.created_by !== session.principal_id) throw new Error('MISMATCH');
+      return row;
+    } catch { throw new ApiFailure(0, 'OUTCOME_UNCONFIRMED'); }
+  }
   async cases(scope: Scope, cursor?: string, signal?: AbortSignal) {
     if (!['platform', 'tenant'].includes(scope.kind)) throw new ApiFailure(403, 'SCOPE_MISMATCH');
     const result = decode('ReconciliationCaseList', await this.read(`/admin/v1/reconciliation-cases?${this.query(scope, cursor)}&limit=50`, signal));
@@ -107,7 +129,7 @@ export class AdminClient {
     if (node.node_id !== nodeId) throw new ApiFailure(403, 'TARGET_MISMATCH');
     return node;
   }
-  private async actionRequest(path: string, init: RequestInit, expectedScope: Scope, expectedId?: string): Promise<ActionRevision> {
+  private async jsonRequest(path: string, init: RequestInit) {
     let response: Response;
     try { response = await this.fetcher(path, { ...init, credentials: 'same-origin', cache: 'no-store', redirect: 'error' }); }
     catch (error) { if (init.signal?.aborted) throw error; throw new ApiFailure(0, init.method === 'POST' ? 'OUTCOME_UNCONFIRMED' : 'CONNECTION_UNAVAILABLE'); }
@@ -117,6 +139,10 @@ export class AdminClient {
       try { const body = decode('Error', raw); throw new ApiFailure(response.status, body.code, body.request_id); }
       catch (error) { if (error instanceof ApiFailure) throw error; throw new ApiFailure(response.status, 'OUTCOME_UNCONFIRMED'); }
     }
+    return { response, raw };
+  }
+  private async actionRequest(path: string, init: RequestInit, expectedScope: Scope, expectedId?: string): Promise<ActionRevision> {
+    const { response, raw } = await this.jsonRequest(path, init);
     let action: AdminAction;
     try { action = decode('AdminAction', raw); } catch { throw new ApiFailure(response.status, 'OUTCOME_UNCONFIRMED'); }
     if (scopeKey(action.request.scope) !== scopeKey(expectedScope) || (expectedId && action.action_id !== expectedId)) throw new ApiFailure(403, 'SCOPE_MISMATCH');

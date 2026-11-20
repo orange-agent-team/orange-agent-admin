@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type TextPriceDraft } from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
 const permissions = { 'node.drain': 'nodes.drain', 'node.quarantine': 'nodes.quarantine', 'node.resume': 'nodes.resume' };
 type NodeKind = keyof typeof names;
-type Pending = { key: string; run: () => Promise<ActionRevision> };
+type Pending<T> = { key: string; run: () => Promise<T> };
 
 export function ActionLookup({ scope, invalidate, onFound }: { scope: Scope; invalidate: () => void; onFound: (action: AdminAction) => void }) {
   const [id, setId] = useState('');
@@ -41,14 +41,14 @@ export function ActionLookup({ scope, invalidate, onFound }: { scope: Scope; inv
   </section>;
 }
 
-export function useIntent(session: AdminSession, invalidate: () => void, completed: (result: ActionRevision) => void, stale: () => void) {
+export function useIntent<T = ActionRevision>(session: AdminSession, invalidate: () => void, completed: (result: T) => void, stale: () => void) {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const [pending, setPending] = useState<Pending>();
+  const [pending, setPending] = useState<Pending<T>>();
   const [error, setError] = useState<unknown>();
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  async function send(intent: Pending) {
+  async function send(intent: Pending<T>) {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(undefined);
     try {
@@ -87,7 +87,7 @@ export function useIntent(session: AdminSession, invalidate: () => void, complet
         : error instanceof ApiFailure && [409, 412].includes(error.status) ? '操作或节点版本已变化。请重新读取并核对完整内容后再决定。'
           : '请核对权限、输入及服务状态。未将该请求记为成功。'} />}
   </>;
-  return { disabled: busy || Boolean(pending), busy, notice, start: (run: (key: string) => Promise<ActionRevision>) => {
+  return { disabled: busy || Boolean(pending), busy, notice, start: (run: (key: string) => Promise<T>) => {
     if (lock.current || pending) return;
     const key = crypto.randomUUID(); void send({ key, run: () => run(key) });
   } };
@@ -141,6 +141,7 @@ export function NodeActionCreate({ session, scope, invalidate, onCreated }: { se
 
 export function ActionReview({ action, session, invalidate, onChanged }: { action: AdminAction; session: AdminSession; invalidate: () => void; onChanged: (action: AdminAction) => void }) {
   const [revision, setRevision] = useState<ActionRevision>();
+  const [price, setPrice] = useState<TextPriceDraft>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [reason, setReason] = useState('');
@@ -148,8 +149,18 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined);
-    try { const result = await api.action(action.action_id, action.request.scope); if (active.current) setRevision(result); }
+    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined);
+    try {
+      const result = await api.action(action.action_id, action.request.scope);
+      const request = result.action.request;
+      if (request.action_type === 'pricing.publish') {
+        const terms = await api.priceDraft(request.scope, String(request.payload.price_version_id));
+        if (terms.target_version !== request.target_version || terms.review_report_id !== request.payload.review_report_id ||
+            terms.created_by !== result.action.requested_by) throw new Error('PRICE_REVIEW_MISMATCH');
+        if (active.current) setPrice(terms);
+      }
+      if (active.current) setRevision(result);
+    }
     catch (failure) { if (active.current) { setError(true); if (failure instanceof ApiFailure && [401, 403].includes(failure.status)) invalidate(); } }
     finally { if (active.current) setLoading(false); }
   }
@@ -157,8 +168,9 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const scope = action.request.scope;
   const caseEdit = action.request.action_type === 'case.update';
   const closingCase = caseEdit && action.request.payload.change === 'close';
-  const specific = caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind];
-  const checkerPermission = closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const pricing = action.request.action_type === 'pricing.publish';
+  const specific = pricing ? 'pricing.publish' : caseEdit ? (closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind];
+  const checkerPermission = pricing ? 'pricing.publish.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -174,6 +186,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'state', label: '当前状态', children: doc.state },
       { key: 'scope', label: '执行范围', children: `${doc.request.scope.environment} / ${doc.request.scope.kind} / ${doc.request.scope.scope_id}` },
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
+      ...(price ? [{ key: 'price', label: '本次审核费率与计量配置', children: <><p>输入和输出费率均为每千计量单位的开发积分，两部分费用分别向上取整。</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(price.terms,null,2)}</pre></> }] : []),
       { key: 'digest', label: '服务端内容摘要', children: <Typography.Text copyable>{doc.payload_digest}</Typography.Text> },
       { key: 'policy', label: '审批政策版本', children: doc.policy_version },
       { key: 'expires', label: '到期时间', children: date(doc.expires_at) },

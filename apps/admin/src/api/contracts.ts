@@ -27,6 +27,16 @@ export interface ReconciliationCase {
 export type CaseEdit = {case_id:string} & (
   {change:'assign'; assignee_id:string} | {change:'note';note:string} | {change:'close';resolution_ref:string}
 );
+export interface TextPriceDraftTerms {
+  scope: Scope; node_id: string; execution_profile_id: string; meter_profile_digest: string;
+  input_price: string; output_price: string; output_limit: number; fee_bps: number;
+}
+export interface TextPriceDraft {
+  price_version_id: string; terms: TextPriceDraftTerms; provider_owner_id: string;
+  target_version: string; review_report_id: string; created_by: string; created_at: string;
+  state: 'draft' | 'scheduled' | 'active' | 'blocked'; effective_at?: string; publication_action_id?: string;
+}
+interface TextPriceDraftList { data: TextPriceDraft[]; next_cursor?: string }
 export interface CaseChange {action_id:string;actor_id:string;version:string;occurred_at:string;payload:CaseEdit}
 export interface CaseActivity {case_id:string;owner_id:string;version:string;data:CaseChange[];assigned_to?:string;resolution_ref?:string;next_cursor?:string}
 export interface CasePage { data: ReconciliationCase[]; next_cursor?: string }
@@ -36,6 +46,9 @@ const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
 const validators = {
+  TextPriceDraftList: ajv.compile<TextPriceDraftList>({ $ref: `${schema.$id}#/$defs/TextPriceDraftList` }),
+  TextPriceDraft: ajv.compile<TextPriceDraft>({ $ref: `${schema.$id}#/$defs/TextPriceDraft` }),
+  TextPriceDraftTerms: ajv.compile<TextPriceDraftTerms>({ $ref: `${schema.$id}#/$defs/TextPriceDraftTerms` }),
   ReconciliationCaseActivity: ajv.compile<CaseActivity>({ $ref: `${schema.$id}#/$defs/ReconciliationCaseActivity` }),
   ReconciliationCase: ajv.compile<ReconciliationCase>({ $ref: `${schema.$id}#/$defs/ReconciliationCase` }),
   ReconciliationCaseList: ajv.compile<CasePage>({ $ref: `${schema.$id}#/$defs/ReconciliationCaseList` }),
@@ -51,7 +64,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

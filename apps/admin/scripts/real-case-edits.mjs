@@ -1,5 +1,6 @@
+import { exercisePrices } from './real-price-edits.mjs';
 // Called only by the owned local finance/session fixture.
-export async function exerciseCaseEdits(browser, fixture, origin, screenshot) {
+export async function exerciseCaseEdits(browser, fixture, origin, screenshot, priceScreenshot) {
   let posts=0;
   const contexts = [];
   async function operatorPage(actor) {
@@ -57,7 +58,9 @@ export async function exerciseCaseEdits(browser, fixture, origin, screenshot) {
     if(await maker.getByRole('button',{name:'提交事项变更申请'}).count())throw Error('Closed case remains editable');
     if(posts!==7)throw Error('Expected three proposals, one independent approval and three executions');
     await maker.screenshot({path:screenshot,fullPage:true});
-    return {action_posts:posts,case_id:'browser-case-050',closed:true};
+    const casePosts=posts;
+    const pricing=await exercisePrices(maker,checker,fixture.price_terms,priceScreenshot);
+    return {action_posts:casePosts,pricing,case_id:'browser-case-050',closed:true};
   } finally {
     await Promise.all(contexts.map(c=>c.close()));
   }
