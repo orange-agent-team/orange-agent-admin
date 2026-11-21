@@ -7,6 +7,7 @@ import { allowed, authorityKey, scopeKey, type AdminSession, type Scope } from '
 import { date, envNames, Failure, Heading } from './widgets';
 const api = new AdminClient();
 const ActionsPage = lazy(() => import('./ActionsPage'));
+const StatementPage=lazy(()=>import('./StatementPage'));
 const CasePage = lazy(() => import('./CasePage'));
 const RoleBindingsPage = lazy(() => import('./RoleBindingsPage'));
 const SupportPage = lazy(() => import('./SupportPage'));
@@ -27,8 +28,9 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
   const scopedSession: AdminSession = { ...session, scopes: [scope], permissions: scopeAuthority.data?.permissions ?? [] };
   const permitted = (permission: string) => !scopeAuthority.isFetching && !scopeAuthority.error && !!scopeAuthority.data && allowed(scopedSession, permission, scope);
 
-  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/reconciliation-cases', permission: 'cases.read', label: '对账事项', icon: '≡' }, { path:'/role-bindings',permission:'admins.roles.read',label:'平台角色',icon:'◎' }, { path:'/support',permission:'support.read',label:'支持访问',icon:'◇' }, { path: '/price-drafts', permission: 'pricing.read', label: '开发算力定价', icon: '¤' }, { path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
-    .filter(item => permitted(item.permission) && (item.path!=='/role-bindings'||scope.environment==='dev') && (item.path!=='/support'||(scope.environment==='dev'&&scope.kind==='tenant')) && (item.path !== '/price-drafts' || (scope.environment === 'dev' && ['platform','tenant'].includes(scope.kind))) && (!['/overview','/reconciliation-cases'].includes(item.path) || ['platform', 'tenant'].includes(scope.kind)));
+  const statementAccess=scope.environment==='dev'&&scope.kind==='platform'&&['payments.read','ledger.read','cases.read'].every(p=>permitted(p));
+  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/reconciliation-cases', permission: 'cases.read', label: '对账事项', icon: '≡' }, {path:'/test-statements',permission:'payments.read',label:'商户对账',icon:'≋'},{ path:'/role-bindings',permission:'admins.roles.read',label:'平台角色',icon:'◎' }, { path:'/support',permission:'support.read',label:'支持访问',icon:'◇' }, { path: '/price-drafts', permission: 'pricing.read', label: '开发算力定价', icon: '¤' }, { path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
+    .filter(item => (item.path!=='/test-statements'||statementAccess) && permitted(item.permission) && (item.path!=='/role-bindings'||scope.environment==='dev') && (item.path!=='/support'||(scope.environment==='dev'&&scope.kind==='tenant')) && (item.path !== '/price-drafts' || (scope.environment === 'dev' && ['platform','tenant'].includes(scope.kind))) && (!['/overview','/reconciliation-cases'].includes(item.path) || ['platform', 'tenant'].includes(scope.kind)));
 
   return <QueryClientProvider client={client}>
     <div className="shell">
@@ -42,6 +44,7 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
         <main className="content">{scopeAuthority.isFetching ? <div className="loading"><Spin /></div> : scopeAuthority.error ? <Failure error={scopeAuthority.error} /> : items.length === 0 ? <Empty description="当前身份没有这些页面的查看权限" /> : <Routes key={scopeKey(scope)}>
           <Route path="/overview" element={permitted('overview.read') && ['platform', 'tenant'].includes(scope.kind) ? <OverviewPage scope={scope} queryKey={key} /> : <Empty description="此范围不提供聚合总览" />} />
           <Route path="/actions" element={permitted('actions.read') ? <Suspense fallback={<Spin />}><ActionsPage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate} /></Suspense> : <Empty description="没有操作记录查看权限" />} />
+          <Route path="/test-statements" element={statementAccess?<Suspense fallback={<Spin/>}><StatementPage scope={scope} queryKey={key}/></Suspense>:<Empty description="没有此范围的商户日报权限"/>}/>
           <Route path="/reconciliation-cases" element={permitted('cases.read') && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin />}><CasePage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的对账查看权限" />} />
           <Route path="/role-bindings" element={permitted('admins.roles.read') && scope.environment==='dev' ? <Suspense fallback={<Spin/>}><RoleBindingsPage scope={scope} session={scopedSession} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的角色查看权限"/>}/>
           <Route path="/support" element={permitted('support.read') && scope.environment==='dev' && scope.kind==='tenant' ? <Suspense fallback={<Spin/>}><SupportPage scope={scope} session={scopedSession} queryKey={key} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的支持访问权限"/>}/>

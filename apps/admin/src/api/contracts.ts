@@ -45,6 +45,14 @@ export interface GrantDetail extends SupportGrant {
 export interface SupportExcerpt {grant_id:string;resource_id:string;content_field:'file_content';content:string;truncated:boolean;audit_event_id:string}
 interface GrantPage {data:SupportGrant[];next_cursor?:string}
 export interface TestRefundReview {refund_id:string;payment_order_id:string;owner_id:string;reconciliation_case_id:string;amount:{currency:'USD'|'JPY'|'CNY'|'HKD';minor_units:string};held_microcredits:string;target_version:string;state:string}
+export type StatementRun={run_id:string;merchant_id:string;scan_from_unix:string;until_unix:string;sealed:boolean;last_error:string|null};
+export type StatementRuns={data:StatementRun[];next_cursor:string|null};
+export type CashLine={currency:string;category:string;provider_status:'available'|'pending';lines:string;gross_minor:string;fee_minor:string;net_minor:string};
+export type LocalLine={currency:string;flow:'purchase'|'refund';entries:string;original_minor:string;purchased_bucket_change:string};
+export type StatementIssue={issue_key:string;kind:string;business_ref:string;case_id:string|null;owner_id:string|null};
+export type JobCredits={settled_jobs:string;charged_microcredits:string;provider_pending_microcredits:string;platform_fee_microcredits:string;promotional_microcredits_used:string};
+export type StatementReport={run_id:string;merchant_id:string;report:{scan_from_unix:string;from_unix:string;until_unix:string;merchant_statement_by_settlement_currency:CashLine[];local_business_by_original_currency:LocalLine[];platform_wide_job_credits:JobCredits;platform_wide_execution:{attempts:string;additional_attempts:string};published_artifact_byte_seconds:string;metered_storage_cash_cost:null;metered_bandwidth_cash_cost:null;observed_scan_issues:string};issues:StatementIssue[];next_cursor:string|null};
+export type StatementProof=StatementIssue & {run_id:string;data:{digest:string;detail:Record<string,unknown>}[];next_cursor:string|null};
 export interface TextPriceDraftTerms {
   scope: Scope; node_id: string; execution_profile_id: string; meter_profile_digest: string;
   input_price: string; output_price: string; output_limit: number; fee_bps: number;
@@ -77,6 +85,9 @@ const validators = {
   TranscriptionPriceDraft: ajv.compile<TranscriptionPriceDraft>({ $ref: `${schema.$id}#/$defs/TranscriptionPriceDraft` }),
   TranscriptionPriceDraftTerms: ajv.compile<TranscriptionPriceDraftTerms>({ $ref: `${schema.$id}#/$defs/TranscriptionPriceDraftTerms` }),
   TestRefundReview:ajv.compile<TestRefundReview>({$ref:`${schema.$id}#/$defs/TestRefundReview`}),
+  StatementRunList:ajv.compile<StatementRuns>({ $ref:`${schema.$id}#/$defs/StatementRunList` }),
+  StatementReport:ajv.compile<StatementReport>({ $ref:`${schema.$id}#/$defs/StatementReport` }),
+  StatementIssueEvidence:ajv.compile<StatementProof>({ $ref:`${schema.$id}#/$defs/StatementIssueEvidence` }),
   TextPriceDraftList: ajv.compile<TextPriceDraftList>({ $ref: `${schema.$id}#/$defs/TextPriceDraftList` }),
   TextPriceDraft: ajv.compile<TextPriceDraft>({ $ref: `${schema.$id}#/$defs/TextPriceDraft` }),
   TextPriceDraftTerms: ajv.compile<TextPriceDraftTerms>({ $ref: `${schema.$id}#/$defs/TextPriceDraftTerms` }),
@@ -95,7 +106,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

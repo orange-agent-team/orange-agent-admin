@@ -93,6 +93,21 @@ export class AdminClient {
     if(row.grant_id!==grant||row.resource_id!==resource||row.content_field!=='file_content'||new TextEncoder().encode(row.content).length>limit)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
     return row;
   }
+  async statementRuns(scope:Scope,cursor?:string,signal?:AbortSignal){
+    if(scope.environment!=='dev'||scope.kind!=='platform'||scope.scope_id!=='platform')throw new ApiFailure(403,'SCOPE_MISMATCH');
+    return decode('StatementRunList',await this.read('/admin/v1/test-statements?'+this.query(scope,cursor),signal));
+  }
+  async statement(scope:Scope,id:string,cursor?:string,signal?:AbortSignal){
+    assertId(id);if(scope.environment!=='dev'||scope.kind!=='platform'||scope.scope_id!=='platform')throw new ApiFailure(403,'SCOPE_MISMATCH');
+    const r=decode('StatementReport',await this.read('/admin/v1/test-statements/'+encodeURIComponent(id)+'?'+this.query(scope,cursor),signal));
+    if(r.run_id!==id)throw new ApiFailure(403,'TARGET_MISMATCH');return r;
+  }
+  async statementProof(scope:Scope,key:string,run?:string,cursor?:string,signal?:AbortSignal){
+    if(!/^[0-9a-f]{64}$/.test(key))throw Error('INVALID_ISSUE_KEY');
+    const query=new URLSearchParams(this.query(scope,cursor));if(run){assertId(run);query.set('run_id',run);}
+    const r=decode('StatementIssueEvidence',await this.read('/admin/v1/test-statement-issues/'+key+'?'+query,signal));
+    if(r.issue_key!==key||run&&r.run_id!==run||scope.kind==='tenant'&&r.owner_id!==scope.scope_id)throw new ApiFailure(403,'TARGET_MISMATCH');return r;
+  }
   async testRefund(scope:Scope,id:string,signal?:AbortSignal){
     assertId(id);
     const row=decode('TestRefundReview',await this.read('/admin/v1/test-refunds/'+encodeURIComponent(id)+'?'+this.query(scope),signal));
