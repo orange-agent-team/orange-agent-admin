@@ -25,7 +25,7 @@ export interface ReconciliationCase {
   next_check_at: string; version: string;
 }
 export type CaseEdit = {case_id:string} & (
-  {change:'assign'; assignee_id:string} | {change:'note';note:string} | {change:'close';resolution_ref:string} | {change:'retry_metering';event_id:string}
+  {change:'assign'; assignee_id:string} | {change:'note';note:string} | {change:'close';resolution_ref:string} | {change:'retry_metering';event_id:string} | {change:'release_earning';job_id:string}
 );
 export const adminRoles=['platform_admin','support_operator','compute_operator','finance_operator','security_operator','release_operator','auditor'] as const;
 export type AdminRole=typeof adminRoles[number];
@@ -68,7 +68,7 @@ export type PriceDraft=TextPriceDraft|TranscriptionPriceDraft;
 interface TranscriptionPriceDraftList {data:TranscriptionPriceDraft[];next_cursor?:string}
 interface TextPriceDraftList { data: TextPriceDraft[]; next_cursor?: string }
 export interface CaseChange {action_id:string;actor_id:string;version:string;occurred_at:string;payload:CaseEdit}
-export interface CaseActivity {metering?:{event_id:string;state:"received"|"validated"|"dead"|"posted";generation:string;attempts:string;policy_id:string;retry_deadline_unix:string;last_failure:string|null};case_id:string;owner_id:string;version:string;data:CaseChange[];assigned_to?:string;resolution_ref?:string;next_cursor?:string}
+export interface CaseActivity {earning?:{job_id:string;source_transaction:string;units:string;eligible_unix:string;disposition:string;release_transaction:string|null};metering?:{event_id:string;state:"received"|"validated"|"dead"|"posted";generation:string;attempts:string;policy_id:string;retry_deadline_unix:string;last_failure:string|null};case_id:string;owner_id:string;version:string;data:CaseChange[];assigned_to?:string;resolution_ref?:string;next_cursor?:string}
 export interface CasePage { data: ReconciliationCase[]; next_cursor?: string }
 export interface ErrorBody { code: string; message: string; request_id: string; retry_class: string }
 

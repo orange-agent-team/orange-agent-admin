@@ -144,6 +144,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const [binding,setBinding] = useState<RoleBinding>();
   const [support, setSupport] = useState<ConsentReview | GrantDetail>();
   const [refund,setRefund]=useState<TestRefundReview>();
+  const [earning,setEarning]=useState<CaseActivity['earning']>();
   const [metering,setMetering]=useState<CaseActivity['metering']>();
   const [price, setPrice] = useState<PriceDraft>();
   const [loading, setLoading] = useState(false);
@@ -153,7 +154,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined);setRefund(undefined);setMetering(undefined); setSupport(undefined);setBinding(undefined);
+    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined);setRefund(undefined);setMetering(undefined);setEarning(undefined); setSupport(undefined);setBinding(undefined);
     try {
       const result = await api.action(action.action_id, action.request.scope);
       const request = result.action.request;
@@ -181,6 +182,12 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
         if(r.target_version!==request.target_version||r.payment_order_id!==request.payload.payment_order_id||r.amount.currency!==amount?.currency||r.amount.minor_units!==amount?.minor_units)throw Error('REFUND_REVIEW_MISMATCH');
         if(active.current)setRefund(r);
       }
+      if(request.action_type==='case.update' && request.payload.change==='release_earning'){
+        const evidence=await api.caseActivity(request.scope,String(request.payload.case_id));
+        if(['pending_approval','ready'].includes(result.action.state) &&
+           (evidence.version!==request.target_version || evidence.earning?.disposition!=='ready_for_review' || evidence.earning.job_id!==request.payload.job_id))throw Error('EARNING_TERMS_CHANGED');
+        if(active.current)setEarning(evidence.earning);
+      }
       if (request.action_type==='case.update' && request.payload.change==='retry_metering') {
         const evidence=await api.caseActivity(request.scope,String(request.payload.case_id));
         if (['pending_approval','ready'].includes(result.action.state) &&
@@ -203,6 +210,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const doc = revision?.action;
   const scope = action.request.scope;
   const caseEdit = action.request.action_type === 'case.update';
+  const releasingEarning=caseEdit && action.request.payload.change==='release_earning';
   const retryMetering = caseEdit && action.request.payload.change === 'retry_metering';
   const closingCase = caseEdit && action.request.payload.change === 'close';
   const paymentRefund=action.request.action_type==='payment.refund';
@@ -210,8 +218,8 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const supportPermission = action.request.action_type==='support_access.grant'?'support.grant':action.request.action_type==='support_access.revoke'?'support.revoke':undefined;
   const rolePermission = action.request.action_type==='admin.role_grant'?'admins.grant':action.request.action_type==='admin.role_revoke'?'admins.revoke':undefined;
   const isTarget=!!rolePermission && action.request.payload.principal_id===session.principal_id;
-  const specific = rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (retryMetering ? 'metering.retry' : closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
-  const checkerPermission = rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : retryMetering ? 'metering.retry.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const specific = rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (releasingEarning?'earnings.release':retryMetering ? 'metering.retry' : closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
+  const checkerPermission = rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : releasingEarning?'earnings.release.approve':retryMetering ? 'metering.retry.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -229,6 +237,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
       ...(binding ? [{key:'binding',label:'当前平台角色绑定',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(binding,null,2)}</pre>}] : []),
       ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
+      ...(earning?[{key:'earning',label:'原贡献收益核对',children:<><p>原任务 {earning.job_id} · 待转可用 {earning.units} 微积分</p><p>原结算分录 {earning.source_transaction}</p></>}]:[]),
       ...(metering?[{key:'metering',label:'原计量事件核对',children:<>
         <p>事件 {metering.event_id} · 重试政策 {metering.policy_id}</p>
         <p>处理轮次 {metering.generation}，尝试 {metering.attempts} 次，最近失败原因 {metering.last_failure??'无'}。</p>

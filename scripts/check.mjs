@@ -21,6 +21,9 @@ const definedActions = api.components.schemas.AdminActionCreate.oneOf.map(varian
 const casePolicy = actionPolicies.find(rule => rule.action_type === 'case.update');
 if (actionPolicies.map(rule=>rule.action_type).sort().join() !== definedActions.sort().join() ||
     casePolicy?.approval !== 'conditional' || casePolicy.unknown_variant !== 'reject' ||
+    casePolicy.variants.release_earning?.permission !== 'earnings.release' ||
+    casePolicy.variants.release_earning?.approval !== 'maker_checker' ||
+    casePolicy.variants.release_earning?.approval_permission !== 'earnings.release.approve' ||
     casePolicy.variants.retry_metering?.permission !== 'metering.retry' ||
     casePolicy.variants.retry_metering?.approval !== 'maker_checker' ||
     casePolicy.variants.retry_metering?.approval_permission !== 'metering.retry.approve' ||
