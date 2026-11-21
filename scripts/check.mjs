@@ -21,6 +21,9 @@ const definedActions = api.components.schemas.AdminActionCreate.oneOf.map(varian
 const casePolicy = actionPolicies.find(rule => rule.action_type === 'case.update');
 if (actionPolicies.map(rule=>rule.action_type).sort().join() !== definedActions.sort().join() ||
     casePolicy?.approval !== 'conditional' || casePolicy.unknown_variant !== 'reject' ||
+    casePolicy.variants.retry_metering?.permission !== 'metering.retry' ||
+    casePolicy.variants.retry_metering?.approval !== 'maker_checker' ||
+    casePolicy.variants.retry_metering?.approval_permission !== 'metering.retry.approve' ||
     casePolicy.variants.close.approval !== 'maker_checker' || casePolicy.variants.close.approval_permission !== 'cases.close.approve') {
   throw Error('Incomplete action approval policy catalog');
 }
