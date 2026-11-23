@@ -2,3 +2,8 @@
  .action-form { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 24px; max-width: 720px; }
  .action-form label, .action-review label { display: block; margin: 8px 0; }
  .action-review { margin-top: 24px; overflow-wrap: anywhere; }
+.issuer-directory { display: grid; gap: 14px; }
+.issuer-directory .ant-typography { overflow-wrap: anywhere; }
+.issuer-directory dl { display: flex; flex-wrap: wrap; gap: 12px 32px; }
+.issuer-directory dt { color: #56645e; }
+.issuer-directory dd { font-variant-numeric: tabular-nums; font-size: 1.2rem; font-weight: 600; margin: 4px 0; }

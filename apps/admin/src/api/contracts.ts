@@ -45,6 +45,11 @@ export interface GrantDetail extends SupportGrant {
 export interface SupportExcerpt {grant_id:string;resource_id:string;content_field:'file_content';content:string;truncated:boolean;audit_event_id:string}
 interface GrantPage {data:SupportGrant[];next_cursor?:string}
 export interface TestRefundReview {refund_id:string;payment_order_id:string;owner_id:string;reconciliation_case_id:string;amount:{currency:'USD'|'JPY'|'CNY'|'HKD';minor_units:string};held_microcredits:string;target_version:string;state:string}
+export interface DeviceIssuer {
+  issuer_sha256:string; signing_key_sha256:string|null; retained_certificates:string; awaiting_exchange:string;
+  active_credentials:string; expiring_within_hour:string; next_expiry_unix:string|null; last_prepared_unix:string;
+}
+export interface DeviceIssuerPage {scope:Scope;observed_unix:string;data:DeviceIssuer[];next_cursor:string|null}
 export type StatementRun={run_id:string;merchant_id:string;scan_from_unix:string;until_unix:string;sealed:boolean;last_error:string|null};
 export type StatementRuns={data:StatementRun[];next_cursor:string|null};
 export type CashLine={currency:string;category:string;provider_status:'available'|'pending';lines:string;gross_minor:string;fee_minor:string;net_minor:string};
@@ -76,6 +81,7 @@ const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
 const validators = {
+  DeviceIssuerPage:ajv.compile<DeviceIssuerPage>({$ref:schema.$id+'#/$defs/DeviceIssuerPage'}),
   AdminRoleBinding: ajv.compile<RoleBinding>({$ref:`${schema.$id}#/$defs/AdminRoleBinding`}),
   SupportContent: ajv.compile<SupportExcerpt>({ $ref: `${schema.$id}#/$defs/SupportContent` }),
   SupportGrantList: ajv.compile<GrantPage>({ $ref: `${schema.$id}#/$defs/SupportGrantList` }),
@@ -106,7 +112,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

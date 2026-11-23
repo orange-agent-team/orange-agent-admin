@@ -1,16 +1,16 @@
 {
-  "openapi_version": "0.1.16",
+  "openapi_version": "0.1.17",
   "source_repository": "orange-agent-server",
-  "source_commit": "e4d89cbc3aaabff5ebb0e245f63cbf3a6741010e",
+  "source_commit": "db5fd89ef3fd6b9960075c446841938385b69cce",
   "source_status": "local candidate commit;not merged or publicly released",
   "files": {
     "admin.openapi.json": {
       "source": "contracts/openapi/admin.v1.json",
-      "sha256": "8982fcd0f2e0462754cf087f823b4eb92a4eefee0da55bbc71190588d5a3eeab"
+      "sha256": "61e566587955388dd3a3bb3bb3c1e109f1bfd58953a1c04248156abb91f97a6e"
     },
     "admin.schema.json": {
       "source": "contracts/json-schema/admin.schema.json",
-      "sha256": "e7c5f2edb419ce86da5c992b7db846cdfe210ffb3927aa43768a1264197df7c7"
+      "sha256": "3317dec89d89e458f5770e2701da5ed6aad377875a986e087d256e9444447073"
     }
   }
 }

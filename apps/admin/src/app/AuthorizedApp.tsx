@@ -14,6 +14,7 @@ const SupportPage = lazy(() => import('./SupportPage'));
 const PricesPage = lazy(() => import('./PricesPage'));
 const AuditPage = lazy(() => import('./AuditPage'));
 
+const DeviceIssuersPage=lazy(()=>import('./DeviceIssuersPage'));
 export default function AuthorizedApp({ session, invalidate, logout }: { session: AdminSession; invalidate: () => void; logout: () => void }) {
   const [selected, setSelected] = useState(0);
   const scope = session.scopes[selected];
@@ -29,8 +30,8 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
   const permitted = (permission: string) => !scopeAuthority.isFetching && !scopeAuthority.error && !!scopeAuthority.data && allowed(scopedSession, permission, scope);
 
   const statementAccess=scope.environment==='dev'&&scope.kind==='platform'&&['payments.read','ledger.read','cases.read'].every(p=>permitted(p));
-  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/reconciliation-cases', permission: 'cases.read', label: '对账事项', icon: '≡' }, {path:'/test-statements',permission:'payments.read',label:'商户对账',icon:'≋'},{ path:'/role-bindings',permission:'admins.roles.read',label:'平台角色',icon:'◎' }, { path:'/support',permission:'support.read',label:'支持访问',icon:'◇' }, { path: '/price-drafts', permission: 'pricing.read', label: '开发算力定价', icon: '¤' }, { path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
-    .filter(item => (item.path!=='/test-statements'||statementAccess) && permitted(item.permission) && (item.path!=='/role-bindings'||scope.environment==='dev') && (item.path!=='/support'||(scope.environment==='dev'&&scope.kind==='tenant')) && (item.path !== '/price-drafts' || (scope.environment === 'dev' && ['platform','tenant'].includes(scope.kind))) && (!['/overview','/reconciliation-cases'].includes(item.path) || ['platform', 'tenant'].includes(scope.kind)));
+  const items = [{ path: '/overview', permission: 'overview.read', label: '运行总览', icon: '◫' }, { path: '/actions', permission: 'actions.read', label: '管理操作', icon: '↗' }, { path: '/reconciliation-cases', permission: 'cases.read', label: '对账事项', icon: '≡' }, {path:'/test-statements',permission:'payments.read',label:'商户对账',icon:'≋'},{ path:'/role-bindings',permission:'admins.roles.read',label:'平台角色',icon:'◎' }, { path:'/support',permission:'support.read',label:'支持访问',icon:'◇' }, { path: '/price-drafts', permission: 'pricing.read', label: '开发算力定价', icon: '¤' }, {path:'/device-issuers',permission:'device_issuers.read',label:'设备签发 CA',icon:'◇'},{ path: '/audit-events', permission: 'audit.read', label: '审计记录', icon: '◷' }]
+    .filter(item => (item.path!=='/device-issuers'||scope.environment==='dev'&&['platform','region'].includes(scope.kind)) && (item.path!=='/test-statements'||statementAccess) && permitted(item.permission) && (item.path!=='/role-bindings'||scope.environment==='dev') && (item.path!=='/support'||(scope.environment==='dev'&&scope.kind==='tenant')) && (item.path !== '/price-drafts' || (scope.environment === 'dev' && ['platform','tenant'].includes(scope.kind))) && (!['/overview','/reconciliation-cases'].includes(item.path) || ['platform', 'tenant'].includes(scope.kind)));
 
   return <QueryClientProvider client={client}>
     <div className="shell">
@@ -49,6 +50,8 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
           <Route path="/role-bindings" element={permitted('admins.roles.read') && scope.environment==='dev' ? <Suspense fallback={<Spin/>}><RoleBindingsPage scope={scope} session={scopedSession} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的角色查看权限"/>}/>
           <Route path="/support" element={permitted('support.read') && scope.environment==='dev' && scope.kind==='tenant' ? <Suspense fallback={<Spin/>}><SupportPage scope={scope} session={scopedSession} queryKey={key} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的支持访问权限"/>}/>
           <Route path="/price-drafts" element={permitted('pricing.read') && scope.environment==='dev' && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin/>}><PricesPage scope={scope} session={scopedSession} queryKey={key} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的定价查看权限"/>}/>
+          <Route path="/device-issuers" element={permitted('device_issuers.read')&&scope.environment==='dev'&&['platform','region'].includes(scope.kind)?
+            <Suspense fallback={<Spin/>}><DeviceIssuersPage scope={scope} queryKey={key}/></Suspense>:<Empty description="没有此范围的签发 CA 查看权限"/>}/>
           <Route path="/audit-events" element={permitted('audit.read') ? <Suspense fallback={<Spin />}><AuditPage scope={scope} queryKey={key} /></Suspense> : <Empty description="没有审计记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />
         </Routes>}</main>

@@ -93,6 +93,25 @@ export class AdminClient {
     if(row.grant_id!==grant||row.resource_id!==resource||row.content_field!=='file_content'||new TextEncoder().encode(row.content).length>limit)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
     return row;
   }
+  async deviceIssuers(scope:Scope,cursor?:string,signal?:AbortSignal){
+    if(scope.environment!=='dev' || !['platform','region'].includes(scope.kind) || scope.kind==='platform' && scope.scope_id!=='platform')
+      throw Error('INVALID_ISSUER_SCOPE');
+    const query=new URLSearchParams({environment:scope.environment,scope_kind:scope.kind,scope_id:scope.scope_id,limit:'20'});
+    if(cursor)query.set('cursor',cursor);
+    const page=decode('DeviceIssuerPage',await this.read('/admin/v1/device-issuers?'+query,signal));
+    if(scopeKey(page.scope)!==scopeKey(scope) || page.data.length>20 || BigInt(page.observed_unix)>8640000000000n)throw Error('UNCONFIRMED_ISSUER_SCOPE');
+    let last=cursor?.split('.')[0]??'';
+    for(const r of page.data){
+      const active=BigInt(r.active_credentials),held=BigInt(r.retained_certificates);
+      if(r.issuer_sha256<=last || BigInt(r.expiring_within_hour)>active || active+BigInt(r.awaiting_exchange)>held ||
+         (active===0n)!==(r.next_expiry_unix===null) || BigInt(r.last_prepared_unix)>BigInt(page.observed_unix) ||
+         r.next_expiry_unix!==null && (BigInt(r.next_expiry_unix)<BigInt(page.observed_unix) || BigInt(r.next_expiry_unix)>8640000000000n))
+        throw Error('INVALID_ISSUER_COUNTS');
+      last=r.issuer_sha256;
+    }
+    if(page.next_cursor!==null && (!page.data.length || !page.next_cursor.startsWith(last+'.')))throw Error('INVALID_ISSUER_POSITION');
+    return page;
+  }
   async statementRuns(scope:Scope,cursor?:string,signal?:AbortSignal){
     if(scope.environment!=='dev'||scope.kind!=='platform'||scope.scope_id!=='platform')throw new ApiFailure(403,'SCOPE_MISMATCH');
     return decode('StatementRunList',await this.read('/admin/v1/test-statements?'+this.query(scope,cursor),signal));
