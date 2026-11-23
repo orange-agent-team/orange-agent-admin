@@ -43,7 +43,13 @@ try{
     const {checkWithdrawal} = await import('./verify-key-withdrawal.mjs');
     await checkWithdrawal(browser, f);
   }
-  console.log(JSON.stringify({step:'verified',regionScoped:true,countsReflectActivation:true,withdrawnReaderDenied:true}));
-}finally{
-  input.close();process.stdin.pause();if(browser)await browser.close();await new Promise(ok=>site.httpServer.close(ok));
+} finally {
+  input.close();
+  process.stdin.pause();
+  try {
+    if (browser) await browser.close();
+  } finally {
+    await site.close();
+  }
 }
+console.log(JSON.stringify({step:'verified',regionScoped:true,countsReflectActivation:true,withdrawnReaderDenied:true}));
