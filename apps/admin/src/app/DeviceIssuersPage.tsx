@@ -2,11 +2,12 @@ import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Button,Card,Empty,Space,Spin,Typography} from 'antd';
 import {AdminClient} from '../api/client';
-import type {Scope} from '../api/contracts';
+import {IssuerWithdrawal} from './IssuerWithdrawal';
+import type {AdminSession,Scope} from '../api/contracts';
 import {Failure} from './widgets';
 const api=new AdminClient();
 const date=(seconds:string)=>new Date(Number(seconds)*1000).toLocaleString();
-export default function DeviceIssuersPage({scope,queryKey}:{scope:Scope;queryKey:string[]}){
+export default function DeviceIssuersPage({scope,queryKey,session,invalidate}:{scope:Scope;queryKey:string[];session:AdminSession;invalidate:()=>void}){
   const [pages,setPages]=useState<(string|undefined)[]>([undefined]);
   const current=pages.at(-1);
   const q=useQuery({queryKey:[...queryKey,'device-issuers',current],queryFn:({signal})=>api.deviceIssuers(scope,current,signal)});
@@ -23,6 +24,9 @@ export default function DeviceIssuersPage({scope,queryKey}:{scope:Scope;queryKey
         <dl><div><dt>保留的签发记录</dt><dd>{r.retained_certificates}</dd></div><div><dt>等待兑换</dt><dd>{r.awaiting_exchange}</dd></div>
           <div><dt>有效设备凭据</dt><dd>{r.active_credentials}</dd></div><div><dt>一小时内到期</dt><dd>{r.expiring_within_hour}</dd></div></dl>
         <p>最近签发 {date(r.last_prepared_unix)}{r.next_expiry_unix&&<> · 最近凭据到期 {date(r.next_expiry_unix)}</>}</p>
+        {scope.kind==='platform' && r.signing_key_sha256 && <IssuerWithdrawal
+          key={r.signing_key_sha256} signingKey={r.signing_key_sha256} scope={scope} session={session}
+          invalidate={invalidate} onWithdrawal={()=>void q.refetch()}/>}
       </Card>)}
       <Space><Button disabled={pages.length===1||q.isFetching} onClick={()=>setPages(p=>p.slice(0,-1))}>上一页</Button>
         <Button disabled={page.next_cursor===null||q.isFetching} onClick={()=>{if(page.next_cursor)setPages(p=>[...p,page.next_cursor!]);}}>下一页</Button></Space>

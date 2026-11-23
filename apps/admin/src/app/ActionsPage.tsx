@@ -18,6 +18,7 @@ const actionNames: Record<string, string> = {
   'credential.revoke': '撤销凭证', 'payment.refund': '退款申请', 'ledger.reverse': '账务冲正',
   'pricing.publish': '发布价格', 'release.rollout': '发行灰度', 'release.revoke': '撤回发行',
   'feature.disable': '关闭功能', 'feature.enable': '恢复功能', 'admin.role_grant': '授予平台角色', 'admin.role_revoke':'撤销平台角色',
+  'device_issuer.withdraw': '撤回设备签发公钥',
   'support_access.grant': '支持访问授权',
 };
 export default function ActionsPage({ scope, queryKey, session, invalidate }: { scope: Scope; queryKey: string[]; session: AdminSession; invalidate: () => void }) {

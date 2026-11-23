@@ -49,6 +49,16 @@ export interface DeviceIssuer {
   issuer_sha256:string; signing_key_sha256:string|null; retained_certificates:string; awaiting_exchange:string;
   active_credentials:string; expiring_within_hour:string; next_expiry_unix:string|null; last_prepared_unix:string;
 }
+export interface DeviceIssuerKeyReview {
+  signing_key_sha256: string;
+  state: 'observed' | 'withdrawn';
+  target_version: string;
+  withdrawal_action_id: string | null;
+  observed_ca_certificates: string;
+  valid_issued_credentials: string;
+  live_verified_sessions: string;
+  live_unattributed_sessions: string;
+}
 export interface DeviceIssuerPage {scope:Scope;observed_unix:string;data:DeviceIssuer[];next_cursor:string|null}
 export type StatementRun={run_id:string;merchant_id:string;scan_from_unix:string;until_unix:string;sealed:boolean;last_error:string|null};
 export type StatementRuns={data:StatementRun[];next_cursor:string|null};
@@ -81,6 +91,7 @@ const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
 const validators = {
+  DeviceIssuerKeyReview:ajv.compile<DeviceIssuerKeyReview>({$ref:schema.$id+'#/$defs/DeviceIssuerKeyReview'}),
   DeviceIssuerPage:ajv.compile<DeviceIssuerPage>({$ref:schema.$id+'#/$defs/DeviceIssuerPage'}),
   AdminRoleBinding: ajv.compile<RoleBinding>({$ref:`${schema.$id}#/$defs/AdminRoleBinding`}),
   SupportContent: ajv.compile<SupportExcerpt>({ $ref: `${schema.$id}#/$defs/SupportContent` }),
@@ -112,7 +123,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { DeviceIssuerKeyReview:DeviceIssuerKeyReview; DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];

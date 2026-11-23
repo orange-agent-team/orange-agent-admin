@@ -39,6 +39,10 @@ try{
   await page.getByRole('button',{name:'刷新目录'}).click();
   await row.waitFor({state:'detached'});
   require(await page.getByText(f.issuer,{exact:true}).count()===0,'Withdrawn Admin can still see issuer data');
+  if (f.maker && f.checker) {
+    const {checkWithdrawal} = await import('./verify-key-withdrawal.mjs');
+    await checkWithdrawal(browser, f);
+  }
   console.log(JSON.stringify({step:'verified',regionScoped:true,countsReflectActivation:true,withdrawnReaderDenied:true}));
 }finally{
   input.close();process.stdin.pause();if(browser)await browser.close();await new Promise(ok=>site.httpServer.close(ok));

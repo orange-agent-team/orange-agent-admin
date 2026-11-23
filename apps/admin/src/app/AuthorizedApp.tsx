@@ -51,7 +51,7 @@ export default function AuthorizedApp({ session, invalidate, logout }: { session
           <Route path="/support" element={permitted('support.read') && scope.environment==='dev' && scope.kind==='tenant' ? <Suspense fallback={<Spin/>}><SupportPage scope={scope} session={scopedSession} queryKey={key} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的支持访问权限"/>}/>
           <Route path="/price-drafts" element={permitted('pricing.read') && scope.environment==='dev' && ['platform','tenant'].includes(scope.kind) ? <Suspense fallback={<Spin/>}><PricesPage scope={scope} session={scopedSession} queryKey={key} invalidate={invalidate}/></Suspense> : <Empty description="没有此范围的定价查看权限"/>}/>
           <Route path="/device-issuers" element={permitted('device_issuers.read')&&scope.environment==='dev'&&['platform','region'].includes(scope.kind)?
-            <Suspense fallback={<Spin/>}><DeviceIssuersPage scope={scope} queryKey={key}/></Suspense>:<Empty description="没有此范围的签发 CA 查看权限"/>}/>
+            <Suspense fallback={<Spin/>}><DeviceIssuersPage scope={scope} queryKey={key} session={scopedSession} invalidate={invalidate}/></Suspense>:<Empty description="没有此范围的签发 CA 查看权限"/>}/>
           <Route path="/audit-events" element={permitted('audit.read') ? <Suspense fallback={<Spin />}><AuditPage scope={scope} queryKey={key} /></Suspense> : <Empty description="没有审计记录查看权限" />} />
           <Route path="*" element={<Navigate replace to={items[0].path} />} />
         </Routes>}</main>

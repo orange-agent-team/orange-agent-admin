@@ -17,3 +17,15 @@ it('refuses wrong scope, mismatched pages, impossible counts and unexpected mate
     await expect(client(wrong).deviceIssuers(scope)).rejects.toThrow();
   }
 });
+
+const platform: Scope={environment:'dev',kind:'platform',scope_id:'platform'};
+const impact={signing_key_sha256:digest,state:'observed',withdrawal_action_id:null,target_version:'2'.repeat(64),
+  observed_ca_certificates:'2',valid_issued_credentials:'3',live_verified_sessions:'1',live_unattributed_sessions:'4'};
+it('binds withdrawal review to the platform, exact public key and retained action',async()=>{
+  expect(await client(impact).reviewSigningKey(platform,digest)).toEqual(impact);
+  await expect(client(impact).reviewSigningKey(scope,digest)).rejects.toThrow('INVALID_SIGNING_KEY_TARGET');
+  for(const changed of [{...impact,signing_key_sha256:'3'.repeat(64)},{...impact,state:'withdrawn'},{...impact,withdrawal_action_id:'unrelated'},
+      {...impact,valid_issued_credentials:'-1'},{...impact,private_key:'unexpected'}]){
+    await expect(client(changed).reviewSigningKey(platform,digest)).rejects.toThrow();
+  }
+});

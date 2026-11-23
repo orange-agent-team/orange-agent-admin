@@ -93,6 +93,14 @@ export class AdminClient {
     if(row.grant_id!==grant||row.resource_id!==resource||row.content_field!=='file_content'||new TextEncoder().encode(row.content).length>limit)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
     return row;
   }
+  async reviewSigningKey(scope: Scope, key: string, signal?: AbortSignal) {
+    if (scope.environment !== 'dev' || scope.kind !== 'platform' || scope.scope_id !== 'platform' || !/^[0-9a-f]{64}$/.test(key))
+      throw Error('INVALID_SIGNING_KEY_TARGET');
+    const row = decode('DeviceIssuerKeyReview', await this.read(`/admin/v1/device-issuer-keys/${key}?${this.query(scope)}`, signal));
+    if (row.signing_key_sha256 !== key || (row.state === 'withdrawn') !== (row.withdrawal_action_id !== null))
+      throw new ApiFailure(403, 'TARGET_MISMATCH');
+    return row;
+  }
   async deviceIssuers(scope:Scope,cursor?:string,signal?:AbortSignal){
     if(scope.environment!=='dev' || !['platform','region'].includes(scope.kind) || scope.kind==='platform' && scope.scope_id!=='platform')
       throw Error('INVALID_ISSUER_SCOPE');

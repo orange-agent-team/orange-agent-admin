@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
-import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type PriceDraft,type TestRefundReview, type CaseActivity, type ConsentReview, type GrantDetail, type RoleBinding } from '../api/contracts';
+import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type PriceDraft,type TestRefundReview, type CaseActivity, type ConsentReview, type GrantDetail, type RoleBinding, type DeviceIssuerKeyReview } from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
@@ -141,6 +141,7 @@ export function NodeActionCreate({ session, scope, invalidate, onCreated }: { se
 
 export function ActionReview({ action, session, invalidate, onChanged }: { action: AdminAction; session: AdminSession; invalidate: () => void; onChanged: (action: AdminAction) => void }) {
   const [revision, setRevision] = useState<ActionRevision>();
+  const [issuer,setIssuer] = useState<DeviceIssuerKeyReview>();
   const [binding,setBinding] = useState<RoleBinding>();
   const [support, setSupport] = useState<ConsentReview | GrantDetail>();
   const [refund,setRefund]=useState<TestRefundReview>();
@@ -154,10 +155,18 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined); setPrice(undefined);setRefund(undefined);setMetering(undefined);setEarning(undefined); setSupport(undefined);setBinding(undefined);
+    setLoading(true); setError(false); setRevision(undefined); setIssuer(undefined); setPrice(undefined);setRefund(undefined);setMetering(undefined);setEarning(undefined); setSupport(undefined);setBinding(undefined);
     try {
       const result = await api.action(action.action_id, action.request.scope);
       const request = result.action.request;
+      if (request.action_type === 'device_issuer.withdraw') {
+        const row = await api.reviewSigningKey(request.scope, String(request.payload.signing_key_sha256));
+        if (['pending_approval','ready'].includes(result.action.state) && (row.state !== 'observed' || row.target_version !== request.target_version))
+          throw Error('ISSUER_KEY_CHANGED');
+        if (result.action.state === 'succeeded' && row.withdrawal_action_id !== result.action.action_id)
+          throw Error('ISSUER_WITHDRAWAL_MISMATCH');
+        if (active.current) setIssuer(row);
+      }
       if(['admin.role_grant','admin.role_revoke'].includes(request.action_type)){
         const row=await api.roleBinding(request.scope,String(request.payload.principal_id),String(request.payload.role));
         if(['pending_approval','ready'].includes(result.action.state)&&row.target_version!==request.target_version)throw Error('ROLE_BINDING_CHANGED');
@@ -218,8 +227,9 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const supportPermission = action.request.action_type==='support_access.grant'?'support.grant':action.request.action_type==='support_access.revoke'?'support.revoke':undefined;
   const rolePermission = action.request.action_type==='admin.role_grant'?'admins.grant':action.request.action_type==='admin.role_revoke'?'admins.revoke':undefined;
   const isTarget=!!rolePermission && action.request.payload.principal_id===session.principal_id;
-  const specific = rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (releasingEarning?'earnings.release':retryMetering ? 'metering.retry' : closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
-  const checkerPermission = rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : releasingEarning?'earnings.release.approve':retryMetering ? 'metering.retry.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const issuerPermission = action.request.action_type === 'device_issuer.withdraw' ? 'device_issuers.withdraw' : undefined;
+  const specific = issuerPermission ?? rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (releasingEarning?'earnings.release':retryMetering ? 'metering.retry' : closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
+  const checkerPermission = issuerPermission ? 'device_issuers.withdraw.approve' : rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : releasingEarning?'earnings.release.approve':retryMetering ? 'metering.retry.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
   function send(operation: ActionOperation) {
     if (!revision) return;
@@ -235,6 +245,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'state', label: '当前状态', children: doc.state },
       { key: 'scope', label: '执行范围', children: `${doc.request.scope.environment} / ${doc.request.scope.kind} / ${doc.request.scope.scope_id}` },
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
+      ...(issuer ? [{key:'issuer',label:'永久撤回范围',children:<p>共用此密钥的 CA 证书 {issuer.observed_ca_certificates} 张，有效凭据 {issuer.valid_issued_credentials} 个，已验证会话 {issuer.live_verified_sessions} 个。另有 {issuer.live_unattributed_sessions} 个历史会话须重新验证。</p>}] : []),
       ...(binding ? [{key:'binding',label:'当前平台角色绑定',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(binding,null,2)}</pre>}] : []),
       ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
       ...(earning?[{key:'earning',label:'原贡献收益核对',children:<><p>原任务 {earning.job_id} · 待转可用 {earning.units} 微积分</p><p>原结算分录 {earning.source_transaction}</p></>}]:[]),
