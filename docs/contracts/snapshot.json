@@ -1,7 +1,7 @@
 {
   "openapi_version": "0.1.20",
   "source_repository": "orange-agent-server",
-  "source_commit": "d2c6548484e498e4bb02b5b73ea257263002e676",
+  "source_commit": "987afe7fd776c4d7be855c97a7a794f3355a92b8",
   "files": {
     "admin.openapi.json": {
       "source": "contracts/openapi/admin.v1.json",
