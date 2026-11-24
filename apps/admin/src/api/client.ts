@@ -1,4 +1,4 @@
-import { decode, scopeKey, type AdminAction, type AdminSession, type Scope, type TranscriptionPriceDraftTerms, type TextPriceDraftTerms } from './contracts';
+import { decode, scopeKey, type ModelDraft, type CertificationEnvelope, type AdminAction, type AdminSession, type Scope, type TranscriptionPriceDraftTerms, type TextPriceDraftTerms } from './contracts';
 
 export interface ActionRevision { action: AdminAction; etag: string }
 export type ActionOperation = 'approve' | 'reject' | 'execute' | 'cancel';
@@ -59,6 +59,38 @@ export class AdminClient {
     const {checkedDraft}=await import('./model-registry');
     try{return await checkedDraft(await this.read('/admin/v1/model-drafts/'+encodeURIComponent(id)+'?'+this.query(scope),signal),id);}
     catch(e){if(e instanceof ApiFailure && e.status===404 && e.code==='NOT_FOUND')return null;throw e;}
+  }
+  private certificationPath(model:string) {
+    assertId(model);
+    return '/admin/v1/model-drafts/'+encodeURIComponent(model)+'/certifications';
+  }
+  async certifications(scope:Scope,draft:ModelDraft,cursor?:string,signal?:AbortSignal) {
+    const model=draft.model.model_version_id;
+    const page=decode('ModelCertificationPage',await this.read(this.certificationPath(model)+'?'+this.query(scope,cursor),signal));
+    if(page.data.some((v,i)=>v.model_version_id!==model || v.manifest_sha256!==draft.manifest_sha256 ||
+       (i>0 && page.data[i-1].report_id>=v.report_id)))throw Error('INVALID_CERTIFICATION_PAGE');
+    return page;
+  }
+  async certification(scope:Scope,draft:ModelDraft,id:string,signal?:AbortSignal) {
+    if(!/^[a-f0-9]{64}$/.test(id))throw Error('INVALID_REPORT_ID');
+    const {checkedCertification}=await import('./model-registry');
+    return checkedCertification(await this.read(this.certificationPath(draft.model.model_version_id)+'/'+id+'?'+this.query(scope),signal),draft,id);
+  }
+  async registerCertification(session:AdminSession,scope:Scope,draft:ModelDraft,input:{raw:string;id:string;envelope:CertificationEnvelope},key:string){
+    const {raw}=await this.jsonRequest(this.certificationPath(draft.model.model_version_id),{method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':session.csrf_token,'Idempotency-Key':key},
+      body:'{"scope":'+JSON.stringify(scope)+',"certification":'+input.raw+'}'});
+    try {
+      const receipt=decode('ModelCertificationSummary',raw);
+      if(receipt.report_id!==input.id || receipt.registered_by!==session.principal_id || receipt.model_version_id!==draft.model.model_version_id ||
+         receipt.manifest_sha256!==draft.manifest_sha256 || receipt.signing_key_sha256!==input.envelope.signing_key_sha256)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
+      const detail=await this.certification(scope,draft,receipt.report_id);
+      if(detail.signature!==input.envelope.signature || detail.registered_by!==session.principal_id)throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
+      return detail;
+    } catch(error) {
+      if(error instanceof ApiFailure && [401,403].includes(error.status))throw error;
+      throw new ApiFailure(0,'OUTCOME_UNCONFIRMED');
+    }
   }
   async registerModelDraft(session:AdminSession,scope:Scope,input:{raw:string;manifest:{model_version:string};hash:string},key:string,signal:AbortSignal){
     const {checkedDraft,registrationDigest}=await import('./model-registry');

@@ -4,6 +4,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {AdminClient,ApiFailure} from '../api/client';
 import {allowed,type AdminSession,type ModelDraft,type Scope} from '../api/contracts';
 import {proposedFile,registrationDigest} from '../api/model-registry';
+import {ModelGovernance} from './ModelGovernance';
 import {Failure} from './widgets';
 
 const api=new AdminClient();
@@ -81,5 +82,6 @@ export default function ModelRegistryPage({scope,session,queryKey,invalidate}:{s
       {key:'actor',label:'登记主体',children:row.registered_by}
     ]}/>}
   </Card>}
+  {row&&<ModelGovernance key={row.model.model_version_id} session={session} scope={scope} draft={row} queryKey={queryKey} invalidate={invalidate} refresh={()=>{void detail.refetch();void list.refetch();}}/>}
   {message&&<Alert type="info" title={message} action={stepUpNeeded?<Button disabled={busy} onClick={()=>void reauthenticate()}>重新验证身份</Button>:undefined}/>}</>;
 }

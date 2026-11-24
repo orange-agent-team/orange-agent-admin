@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Descriptions, Input, Select, Space, Spin, Typography } from 'antd';
 import { AdminClient, ApiFailure, type ActionOperation, type ActionRevision } from '../api/client';
 import { allowed, type AdminAction, type AdminSession, type NodeView, type Scope, type PriceDraft,type TestRefundReview, type CaseActivity, type ConsentReview, type GrantDetail, type RoleBinding, type DeviceIssuerKeyReview } from '../api/contracts';
+import {CertificationFacts} from './CertificationFacts';
+import type {ModelDraft,CertificationDetail} from '../api/contracts';
 import { date } from './widgets';
 const api = new AdminClient();
 const names = { 'node.drain': '节点排空', 'node.quarantine': '节点隔离', 'node.resume': '节点恢复' };
@@ -136,6 +138,7 @@ export function NodeActionCreate({ session, scope, invalidate, onCreated }: { se
 
 export function ActionReview({ action, session, invalidate, onChanged }: { action: AdminAction; session: AdminSession; invalidate: () => void; onChanged: (action: AdminAction) => void }) {
   const [revision, setRevision] = useState<ActionRevision>();
+  const [modelReview,setModelReview]=useState<{draft:ModelDraft;report?:CertificationDetail}>();
   const [issuer,setIssuer] = useState<DeviceIssuerKeyReview>();
   const [binding,setBinding] = useState<RoleBinding>();
   const [support, setSupport] = useState<ConsentReview | GrantDetail>();
@@ -150,10 +153,22 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const intent = useIntent(session, invalidate, result => { setRevision(result); onChanged(result.action); }, () => setRevision(undefined));
   async function refresh() {
-    setLoading(true); setError(false); setRevision(undefined); setIssuer(undefined); setPrice(undefined);setRefund(undefined);setMetering(undefined);setEarning(undefined); setSupport(undefined);setBinding(undefined);
+    setLoading(true); setError(false); setRevision(undefined);setModelReview(undefined); setIssuer(undefined); setPrice(undefined);setRefund(undefined);setMetering(undefined);setEarning(undefined); setSupport(undefined);setBinding(undefined);
     try {
       const result = await api.action(action.action_id, action.request.scope);
       const request = result.action.request;
+      if(request.action_type==='model.activate'||request.action_type==='model.disable'){
+        const activating=request.action_type==='model.activate';
+        const draft=await api.modelDraft(request.scope,String(request.payload.model_version_id));
+        if(!draft)throw Error('MODEL_REVIEW_MISSING');
+        const report=activating?await api.certification(request.scope,draft,String(request.payload.certification_report_id)):undefined;
+        const pending=['pending_approval','ready'].includes(result.action.state);
+        if(pending && (draft.model.version!==request.target_version || draft.model.status==='disabled' || (activating&&draft.model.status!=='draft')))
+          throw Error('MODEL_VERSION_CHANGED');
+        if(result.action.state==='succeeded' && (result.action.business_ref!==draft.model.model_version_id ||
+            (activating ? draft.model.certification_report_id!==report?.report_id : draft.model.version!==result.action.action_id)))throw Error('MODEL_ACTION_MISMATCH');
+        if(active.current)setModelReview({draft,report});
+      }
       if (request.action_type === 'device_issuer.withdraw') {
         const row = await api.reviewSigningKey(request.scope, String(request.payload.signing_key_sha256));
         if (['pending_approval','ready'].includes(result.action.state) && (row.state !== 'observed' || row.target_version !== request.target_version))
@@ -223,10 +238,13 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
   const rolePermission = action.request.action_type==='admin.role_grant'?'admins.grant':action.request.action_type==='admin.role_revoke'?'admins.revoke':undefined;
   const isTarget=!!rolePermission && action.request.payload.principal_id===session.principal_id;
   const issuerPermission = action.request.action_type === 'device_issuer.withdraw' ? 'device_issuers.withdraw' : undefined;
-  const specific = issuerPermission ?? rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (releasingEarning?'earnings.release':retryMetering ? 'metering.retry' : closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
-  const checkerPermission = issuerPermission ? 'device_issuers.withdraw.approve' : rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : releasingEarning?'earnings.release.approve':retryMetering ? 'metering.retry.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
+  const modelPermission=action.request.action_type==='model.activate'?'models.activate':action.request.action_type==='model.disable'?'models.disable':undefined;
+  const specific = modelPermission ?? issuerPermission ?? rolePermission ?? supportPermission ?? (paymentRefund?'payments.refund':pricing ? 'pricing.publish' : caseEdit ? (releasingEarning?'earnings.release':retryMetering ? 'metering.retry' : closingCase ? 'cases.close' : 'cases.edit') : permissions[action.request.action_type as NodeKind]);
+  const checkerPermission = modelPermission ? 'models.activate.approve' : issuerPermission ? 'device_issuers.withdraw.approve' : rolePermission ? rolePermission+'.approve' : supportPermission==='support.grant' ? 'support.grant.approve' : paymentRefund ? 'payments.refund.approve' : pricing ? 'pricing.publish.approve' : releasingEarning?'earnings.release.approve':retryMetering ? 'metering.retry.approve' : closingCase ? 'cases.close.approve' : 'nodes.resume.approve';
   const live = doc && Date.parse(doc.expires_at) > Date.now();
+  const reportExpired=modelReview?.report && Number(modelReview.report.expires_unix)*1000<=Date.now();
   function send(operation: ActionOperation) {
+    if((operation==='approve'||operation==='execute')&&modelReview?.report&&Number(modelReview.report.expires_unix)*1000<=Date.now())return;
     if (!revision) return;
     const snapshot = structuredClone(revision);
     intent.start(key => api.mutateAction(snapshot, operation, reason, session.csrf_token, key));
@@ -240,6 +258,7 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
       { key: 'state', label: '当前状态', children: doc.state },
       { key: 'scope', label: '执行范围', children: `${doc.request.scope.environment} / ${doc.request.scope.kind} / ${doc.request.scope.scope_id}` },
       { key: 'payload', label: '完整操作内容', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(doc.request, null, 2)}</pre> },
+      ...(modelReview?[{key:'model',label:'模型版本核对',children:<><p>{modelReview.draft.model.model_version_id} · {modelReview.draft.model.status}</p><p>清单摘要 {modelReview.draft.manifest_sha256}</p>{modelReview.report&&<CertificationFacts evidence={modelReview.report}/>}</>}]:[]),
       ...(issuer ? [{key:'issuer',label:'永久撤回范围',children:<p>共用此密钥的 CA 证书 {issuer.observed_ca_certificates} 张，有效凭据 {issuer.valid_issued_credentials} 个，已验证会话 {issuer.live_verified_sessions} 个。另有 {issuer.live_unattributed_sessions} 个历史会话须重新验证。</p>}] : []),
       ...(binding ? [{key:'binding',label:'当前平台角色绑定',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(binding,null,2)}</pre>}] : []),
       ...(support ? [{key:'support',label:'核对用户授权与文件版本',children:<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(support,null,2)}</pre>}] : []),
@@ -262,11 +281,11 @@ export function ActionReview({ action, session, invalidate, onChanged }: { actio
         <label>批准、拒绝或撤回原因<Input.TextArea aria-label="审核原因" value={reason} maxLength={1000} disabled={intent.disabled} onChange={e => setReason(e.target.value)} /></label>
         <Space wrap>
           {doc.state === 'pending_approval' && doc.requested_by !== session.principal_id && !isTarget && allowed(session, 'actions.approve', scope) && allowed(session, checkerPermission, scope) && <>
-            <Button disabled={intent.disabled || !reason.trim()} onClick={() => send('approve')}>独立批准</Button>
+            <Button disabled={intent.disabled || !!reportExpired || !reason.trim()} onClick={() => send('approve')}>独立批准</Button>
             <Button danger disabled={intent.disabled || !reason.trim()} onClick={() => send('reject')}>拒绝申请</Button>
           </>}
           {doc.state === 'pending_approval' && doc.requested_by === session.principal_id && <p>申请人不能批准自己的申请。</p>}
-          {doc.state === 'ready' && !isTarget && doc.request.action_type !== 'node.resume' && allowed(session, 'actions.execute', scope) && allowed(session, specific, scope) && <Button type="primary" disabled={intent.disabled} onClick={() => send('execute')}>确认内容并执行</Button>}
+          {doc.state === 'ready' && !isTarget && doc.request.action_type !== 'node.resume' && allowed(session, 'actions.execute', scope) && allowed(session, specific, scope) && <Button type="primary" disabled={intent.disabled || !!reportExpired} onClick={() => send('execute')}>确认内容并执行</Button>}
           {allowed(session, 'actions.cancel', scope) && allowed(session, specific, scope) && <Button disabled={intent.disabled || !reason.trim()} onClick={() => send('cancel')}>撤回未执行申请</Button>}
         </Space>
       </>}

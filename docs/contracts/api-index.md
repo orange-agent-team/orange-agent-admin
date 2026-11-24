@@ -23,6 +23,11 @@
 | `GET` | `/admin/v1/nodes/{node_id}` | `getNode` | `无body` | `Node` | `nodes.read` |
 | `GET` | `/admin/v1/models` | `listModelVersion` | `无body` | `ModelVersionList` | `models.read` |
 | `GET` | `/admin/v1/models/{model_version_id}` | `getModelVersion` | `无body` | `ModelVersion` | `models.read` |
+| `POST` | `/admin/v1/model-drafts` | `registerModelDraft` | `RegisterModelDraft` | `ModelDraftReceipt` | `models.draft` |
+| `GET` | `/admin/v1/model-drafts/{model_version_id}` | `getModelDraftReceipt` | 无 | `ModelDraftReceipt` | `models.read` |
+| `POST` | `/admin/v1/model-drafts/{model_version_id}/certifications` | `registerModelCertification` | `RegisterModelCertification` | `ModelCertificationSummary` | `models.draft` |
+| `GET` | `/admin/v1/model-drafts/{model_version_id}/certifications` | `listModelCertifications` | 无 | `ModelCertificationPage` | `models.read` |
+| `GET` | `/admin/v1/model-drafts/{model_version_id}/certifications/{report_id}` | `getModelCertification` | 无 | `ModelCertificationDetail` | `models.read` |
 | `GET` | `/admin/v1/payments` | `listPayment` | `无body` | `PaymentList` | `payments.read` |
 | `GET` | `/admin/v1/payments/{payment_order_id}` | `getPayment` | `无body` | `Payment` | `payments.read` |
 | `GET` | `/admin/v1/ledger/transactions` | `listLedgerTransaction` | `无body` | `LedgerTransactionList` | `ledger.read` |

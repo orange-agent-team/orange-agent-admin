@@ -98,8 +98,27 @@ export interface RegistryManifest {
   pricing:{policy:'local_unpriced'}|{policy:'price_version';price_version:string};
 }
 export interface ModelDraft {model:ModelSummary;manifest:RegistryManifest;manifest_sha256:string;registered_by:string;registration_sha256:string}
+export interface QualificationReport {
+  version:1; purpose:'model-qualification.v1'; environment:'dev'; model_version_id:string; manifest_sha256:string; model_sha256:string;
+  execution_profile_id:string; execution_profile_digest:string; issued_unix:string; expires_unix:string;
+  license:{identifier:string; source_revision:string; notice_sha256:string; permitted_use:'development-inference'};
+  hardware:{device:string; operating_system:string; architecture:string; memory_bytes:number; logical_processors:number; vram_bytes?:number};
+  measurement:{runtime_sha256:string; verified_asset_count:number; verified_asset_bytes:number; probe_id:string; input_sha256:string; expected_result_sha256:string; observed_result_sha256:string};
+}
+export interface CertificationEnvelope {report:QualificationReport; signing_key_sha256:string; signature:string; license_notice:string}
+export interface CertificationSummary {
+  report_id:string; model_version_id:string; manifest_sha256:string; signing_key_sha256:string; execution_profile_id:string;
+  execution_profile_digest:string; model_sha256:string; issued_unix:string; expires_unix:string; registered_by:string;
+}
+export type CertificationDetail=CertificationSummary & CertificationEnvelope;
+export interface CertificationPage {data:CertificationSummary[];next_cursor?:string}
 export interface ModelPage {data:ModelSummary[];next_cursor?:string}
 const validators = {
+  SignedModelCertification:ajv.compile<CertificationEnvelope>({$ref:schema.$id+"#/$defs/SignedModelCertification"}),
+  ModelCertificationDetail:ajv.compile<CertificationDetail>({$ref:schema.$id+"#/$defs/ModelCertificationDetail"}),
+  ModelCertificationPage:ajv.compile<CertificationPage>({$ref:schema.$id+"#/$defs/ModelCertificationPage"}),
+  ModelCertificationSummary:ajv.compile<CertificationSummary>({$ref:schema.$id+"#/$defs/ModelCertificationSummary"}),
+
   RegistryManifestV1:ajv.compile<RegistryManifest>({$ref:`${schema.$id}#/$defs/RegistryManifestV1`}),
   ModelDraftReceipt:ajv.compile<ModelDraft>({$ref:`${schema.$id}#/$defs/ModelDraftReceipt`}),
   ModelVersionList:ajv.compile<ModelPage>({$ref:`${schema.$id}#/$defs/ModelVersionList`}),
@@ -135,7 +154,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { RegistryManifestV1:RegistryManifest; ModelDraftReceipt:ModelDraft; ModelVersionList:ModelPage; DeviceIssuerKeyReview:DeviceIssuerKeyReview; DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { SignedModelCertification:CertificationEnvelope; ModelCertificationDetail:CertificationDetail; ModelCertificationPage:CertificationPage; ModelCertificationSummary:CertificationSummary;  RegistryManifestV1:RegistryManifest; ModelDraftReceipt:ModelDraft; ModelVersionList:ModelPage; DeviceIssuerKeyReview:DeviceIssuerKeyReview; DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];
