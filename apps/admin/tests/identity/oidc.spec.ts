@@ -28,10 +28,18 @@ function otp(identity = user) {
   const offset = hash[hash.length - 1] & 15;
   return ((hash.readUInt32BE(offset) & 0x7fffffff) % 1000000).toString().padStart(6, '0');
 }
-function grants(revoked: boolean) {
+function ownedDatabase(): URL {
   const url = new URL(readFileSync(databasePath!, 'utf8').trim());
-  if (url.hostname !== '127.0.0.1' || url.port !== '55432' || url.pathname !== '/orange_dev'
-      || user.principal_id !== 'local-admin-operator') throw new Error('Dedicated local fixtures required');
+  const owned = process.env.ORANGE_TEST_ADMIN_OIDC_DATABASE;
+  if (!owned || !/^orange_admin_oidc_[0-9a-f]{32}$/.test(owned)
+      || !['postgres:', 'postgresql:'].includes(url.protocol) || url.hostname !== '127.0.0.1'
+      || url.port !== '55432' || url.pathname !== '/'+owned || url.search || url.hash)
+    throw new Error('The exact disposable Admin database created by this test is required');
+  return url;
+}
+function grants(revoked: boolean) {
+  const url = ownedDatabase();
+  if (user.principal_id !== 'local-admin-operator') throw new Error('Dedicated local operator required');
   execFileSync('/opt/homebrew/opt/postgresql@17/bin/psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1'], {
     input: `UPDATE admin_grants SET revoked=${revoked} WHERE principal_id='local-admin-operator' AND environment='dev';`,
     env: { ...process.env, PGHOST: url.hostname, PGPORT: url.port, PGDATABASE: url.pathname.slice(1),
@@ -67,8 +75,7 @@ async function login(page: Page, negativeOtp = false, identity = user) {
 }
 
 function sql(statement: string): string {
-  const url = new URL(readFileSync(databasePath!, 'utf8').trim());
-  if (url.hostname !== '127.0.0.1' || url.port !== '55432' || url.pathname !== '/orange_dev') throw new Error('Dedicated development database only');
+  const url = ownedDatabase();
   return execFileSync('/opt/homebrew/opt/postgresql@17/bin/psql', ['-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1'], {
     input: statement, encoding: 'utf8', env: { ...process.env, PGHOST: url.hostname, PGPORT: url.port, PGDATABASE: url.pathname.slice(1),
       PGUSER: decodeURIComponent(url.username), PGPASSWORD: decodeURIComponent(url.password) }, stdio: ['pipe', 'pipe', 'pipe'],
