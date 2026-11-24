@@ -67,13 +67,8 @@ export function useIntent<T = ActionRevision>(session: AdminSession, invalidate:
     if (lock.current) return;
     lock.current = true; setBusy(true);
     try {
-      const response = await fetch('/admin/v1/auth/step-up', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: { 'X-CSRF-Token': session.csrf_token } });
-      if (!response.ok) throw new ApiFailure(response.status, 'STEP_UP_FAILED');
-      const body = await response.json() as { authorization_url?: unknown };
-      if (typeof body.authorization_url !== 'string') throw new Error('INVALID_AUTHORIZATION_URL');
-      const url = new URL(body.authorization_url);
-      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))) throw new Error('INVALID_AUTHORIZATION_URL');
-      window.location.assign(url.href);
+      const url=await api.stepUpUrl(session);
+      if(active.current) window.location.assign(url.href);
     } catch (failure) { if (active.current) setError(failure); }
     finally { lock.current = false; if (active.current) setBusy(false); }
   }

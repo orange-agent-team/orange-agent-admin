@@ -17,6 +17,15 @@ export class ApiFailure extends Error {
 /** Same-origin, no persistence, no automatic mutation retry. Backend remains authoritative. */
 export class AdminClient {
   constructor(private readonly fetcher: typeof fetch = (input, init) => globalThis.fetch(input, init)) {}
+  async stepUpUrl(session:AdminSession,signal?:AbortSignal):Promise<URL>{
+      const response = await this.fetcher('/admin/v1/auth/step-up', { method: 'POST', signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: { 'X-CSRF-Token': session.csrf_token } });
+      if (!response.ok) throw new ApiFailure(response.status, 'STEP_UP_FAILED');
+      const body = await response.json() as { authorization_url?: unknown };
+      if (typeof body.authorization_url !== 'string') throw new Error('INVALID_AUTHORIZATION_URL');
+      const url = new URL(body.authorization_url);
+      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))) throw new Error('INVALID_AUTHORIZATION_URL');
+      return url;
+  }
   private async read(path: string, signal?: AbortSignal): Promise<unknown> {
     if (!path.startsWith('/admin/v1/') || path.includes('://') || path.includes('\\')) throw new Error('INVALID_API_PATH');
     let response: Response;
@@ -39,6 +48,27 @@ export class AdminClient {
     const q = new URLSearchParams({ environment: scope.environment, scope_kind: scope.kind, scope_id: scope.scope_id });
     if (cursor) q.set('cursor', cursor);
     return q.toString();
+  }
+  async registeredModels(scope:Scope,cursor?:string,signal?:AbortSignal){
+    const row=decode('ModelVersionList',await this.read('/admin/v1/models?'+this.query(scope,cursor),signal));
+    if(row.data.some((v,i)=>i>0&&row.data[i-1].model_version_id>=v.model_version_id))throw Error('INVALID_MODEL_PAGE');
+    return row;
+  }
+  async modelDraft(scope:Scope,id:string,signal?:AbortSignal){
+    assertId(id);
+    const {checkedDraft}=await import('./model-registry');
+    try{return await checkedDraft(await this.read('/admin/v1/model-drafts/'+encodeURIComponent(id)+'?'+this.query(scope),signal),id);}
+    catch(e){if(e instanceof ApiFailure && e.status===404 && e.code==='NOT_FOUND')return null;throw e;}
+  }
+  async registerModelDraft(session:AdminSession,scope:Scope,input:{raw:string;manifest:{model_version:string};hash:string},key:string,signal:AbortSignal){
+    const {checkedDraft,registrationDigest}=await import('./model-registry');
+    const {raw}=await this.jsonRequest('/admin/v1/model-drafts',{method:'POST',signal,
+      headers:{'Content-Type':'application/json','X-CSRF-Token':session.csrf_token,'Idempotency-Key':key},
+      body:'{"scope":'+JSON.stringify(scope)+',"manifest":'+input.raw+'}'});
+    const row=await checkedDraft(raw,input.manifest.model_version);
+    if(row.registered_by!==session.principal_id || row.manifest_sha256!==input.hash ||
+       row.registration_sha256!==await registrationDigest(session.principal_id,key,input.hash))throw Error('UNCONFIRMED_MODEL_REGISTRATION');
+    return row;
   }
   async overview(scope: Scope, signal?: AbortSignal) {
     const result = decode('Overview', await this.read(`/admin/v1/overview?${this.query(scope)}`, signal));

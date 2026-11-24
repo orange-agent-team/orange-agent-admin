@@ -90,7 +90,19 @@ export interface ErrorBody { code: string; message: string; request_id: string; 
 const ajv = new Ajv2020({ strict: false, allErrors: false });
 ajv.addFormat('date-time', (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value) && Number.isFinite(Date.parse(value)));
 ajv.addSchema(schema);
+export interface ModelSummary { model_version_id:string; status:'draft'|'active'|'disabled'; modality:'text'|'embedding'|'image'|'transcription'; version:string; certification_report_id?:string }
+export interface RegistryManifest {
+  schema_version:1; model_version:string; source:{repository:string;revision:string;license:string;asset_lock_sha256:string};
+  artifacts:{source_path:string;cache_path:string;bytes:number;sha256:string}[];runtime:{engine:string;[key:string]:unknown};
+  interface:{modality:ModelSummary['modality'];[key:string]:unknown}; resources:{device:string;artifact_bytes:number};
+  pricing:{policy:'local_unpriced'}|{policy:'price_version';price_version:string};
+}
+export interface ModelDraft {model:ModelSummary;manifest:RegistryManifest;manifest_sha256:string;registered_by:string;registration_sha256:string}
+export interface ModelPage {data:ModelSummary[];next_cursor?:string}
 const validators = {
+  RegistryManifestV1:ajv.compile<RegistryManifest>({$ref:`${schema.$id}#/$defs/RegistryManifestV1`}),
+  ModelDraftReceipt:ajv.compile<ModelDraft>({$ref:`${schema.$id}#/$defs/ModelDraftReceipt`}),
+  ModelVersionList:ajv.compile<ModelPage>({$ref:`${schema.$id}#/$defs/ModelVersionList`}),
   DeviceIssuerKeyReview:ajv.compile<DeviceIssuerKeyReview>({$ref:schema.$id+'#/$defs/DeviceIssuerKeyReview'}),
   DeviceIssuerPage:ajv.compile<DeviceIssuerPage>({$ref:schema.$id+'#/$defs/DeviceIssuerPage'}),
   AdminRoleBinding: ajv.compile<RoleBinding>({$ref:`${schema.$id}#/$defs/AdminRoleBinding`}),
@@ -123,7 +135,7 @@ const validators = {
   AuditEventList: ajv.compile<AuditEventList>({ $ref: `${schema.$id}#/$defs/AuditEventList` }),
   Error: ajv.compile<ErrorBody>({ $ref: `${schema.$id}#/$defs/Error` }),
 };
-interface Types { DeviceIssuerKeyReview:DeviceIssuerKeyReview; DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
+interface Types { RegistryManifestV1:RegistryManifest; ModelDraftReceipt:ModelDraft; ModelVersionList:ModelPage; DeviceIssuerKeyReview:DeviceIssuerKeyReview; DeviceIssuerPage:DeviceIssuerPage; StatementRunList:StatementRuns; StatementReport:StatementReport; StatementIssueEvidence:StatementProof;  TestRefundReview:TestRefundReview; TranscriptionPriceDraftList:TranscriptionPriceDraftList; TranscriptionPriceDraft:TranscriptionPriceDraft; TranscriptionPriceDraftTerms:TranscriptionPriceDraftTerms; AdminRoleBinding: RoleBinding; SupportContent:SupportExcerpt; SupportGrantList:GrantPage; SupportGrantDetail:GrantDetail; SupportConsentReview:ConsentReview; TextPriceDraftList: TextPriceDraftList; TextPriceDraft: TextPriceDraft; TextPriceDraftTerms: TextPriceDraftTerms; ReconciliationCaseActivity:CaseActivity; ReconciliationCase: ReconciliationCase; ReconciliationCaseList: CasePage; AdminScopePermissions: AdminScopePermissions; AuditEvent: AuditEvent; AuditEventList: AuditEventList; SessionRevocationContext: { csrf_token: string }; AdminSession: AdminSession; Overview: Overview; AdminAction: AdminAction; AdminActionCreate: AdminAction['request']; Node: NodeView; AdminActionList: ActionList; Error: ErrorBody }
 export function decode<K extends keyof Types>(kind: K, value: unknown): Types[K] {
   if (!validators[kind](value)) throw new Error('INVALID_RESPONSE');
   return value as Types[K];
